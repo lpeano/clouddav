@@ -1,0 +1,134 @@
+/* ui.css */
+/* Stili per gli elementi UI globali come la rotella di caricamento e le modali. */
+
+/* Stili per la Rotella di Caricamento Modale */
+#loading-overlay {
+    position: absolute; /* Posizionato rispetto a #content-area */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7); /* Sfondo bianco semitrasparente */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 5; /* Assicura che sia sopra gli iframes ma sotto message history e upload box */
+    pointer-events: auto; /* Permette di intercettare i click per bloccare l'interazione */
+    display: none; /* Nascosto di default */
+}
+
+.spinner {
+    border: 8px solid #f3f3f3; /* Light grey */
+    border-top: 8px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 2s linear infinite; /* Animazione di rotazione */
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+/* Fine Stili Rotella di Caricamento Modale */
+
+/* --- Stili per le Modali Generiche --- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Sfondo semitrasparente */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000; /* Assicura che sia sopra tutto il resto */
+    display: none; /* Nascosto di default */
+}
+
+.modal-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    width: 90%; /* Larghezza su mobile */
+    max-width: 400px; /* Larghezza massima su desktop */
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.modal-content label {
+    font-weight: bold;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="range"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Include padding e bordo nella larghezza */
+}
+
+.modal-content .slider-value {
+    text-align: center;
+    font-weight: bold;
+    margin-top: 5px;
+}
+ .modal-content p {
+     margin: 0;
+     padding: 0;
+     text-align: center;
+ }
+
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.modal-actions button {
+    padding: 8px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.modal-actions button.primary {
+    background-color: #4CAF50; /* Verde */
+    color: white;
+    border-color: #388E3C; /* Verde scuro */
+}
+ .modal-actions button.primary:hover {
+     background-color: #388E3C;
+ }
+
+.modal-actions button.danger {
+    background-color: #f44336; /* Rosso */
+    color: white;
+    border-color: #d32f2f; /* Rosso scuro */
+}
+ .modal-actions button.danger:hover {
+    background-color: #d32f2f;
+ }
+
+.modal-actions button.secondary {
+    background-color: #f0f0f0;
+}
+ .modal-actions button.secondary:hover {
+     background-color: #e0e0e0;
+ }
+
+/* --- Fine Stili Modali Generiche --- */
+
+/* Puoi aggiungere qui altri stili UI globali se necessario */

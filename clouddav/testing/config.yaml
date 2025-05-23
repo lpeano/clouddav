@@ -1,0 +1,72 @@
+# config.yaml.example
+
+# Authentication configuration
+# enable_auth: true to enable authentication, false to disable
+enable_auth: false
+
+# Azure Active Directory (Microsoft Entra ID) Configuration (Required if enable_auth is true)
+azure_ad:
+  tenant_id: "YOUR_AZURE_AD_TENANT_ID"
+  client_id: "YOUR_AZURE_AD_CLIENT_ID"
+  client_secret: "YOUR_AZURE_AD_CLIENT_SECRET"
+  redirect_url: "https://127.0.0.1/auth/callback" # e.g., http://localhost:8080/auth/callback
+  allowed_groups: [] # Optional: List of Azure AD Group Object IDs allowed to use the application globally
+
+# Storage Configurations
+# List of filesystems and/or blob storages to expose
+storages:
+  # Example Local Filesystem Configuration
+  - name: "Local Files" # Unique name for this storage instance
+    type: "local"       # Storage type
+    path: "c:/Users/lpeano/PROVE"   # Physical path on the server (inside the container/pod)
+    permissions:        # Group -> permissions mapping for this storage instance
+      - group_id: "GLOBAL_READ_WRITE_GROUP_ID" # Azure AD Group Object ID
+        access: "write" # "read" or "write"
+      - group_id: "GLOBAL_READ_ONLY_GROUP_ID"
+        access: "read"
+
+  # Configuration for Azure Blob Storage Account: bsconnectionuat
+  - name: "bsconnectionuat fdr" # Unique name for this storage instance
+    type: "azure-blob"   # Storage type
+    # Choose ONE authentication method: connection_string OR account_name (for AAD/Managed Identity)
+    # connection_string: "DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net"
+    account_name: "bsconnectionuat" # Required if not using connection_string (for AAD/Managed Identity)
+    # If using Managed Identity or AAD service principal, ensure the identity running the app has Storage Blob Data Reader/Contributor role on the storage account.
+    # For Windows test environment using Azure CLI, set the environment variable AZURE_CLI_TEST=true
+    container_name: "fdr" # The specific container to expose (e.g., "my-data-container")
+    permissions:             # Group -> permissions mapping for this specific storage instance
+      - group_id: "BSCONNECTIONUAT_RW_GROUP_ID" # Azure AD Group Object ID for read/write access
+        access: "write" # "read" or "write"
+      - group_id: "BSCONNECTIONUAT_RO_GROUP_ID" # Azure AD Group Object ID for read-only access
+        access: "read"
+  - name: "bsconnectionuat flussi" # Unique name for this storage instance
+    type: "azure-blob"   # Storage type
+    # Choose ONE authentication method: connection_string OR account_name (for AAD/Managed Identity)
+    # connection_string: "DefaultEndpointsProtocol=https;AccountName=YOUR_ACCOUNT_NAME;AccountKey=YOUR_ACCOUNT_KEY;EndpointSuffix=core.windows.net"
+    account_name: "bsconnectionuat" # Required if not using connection_string (for AAD/Managed Identity)
+    # If using Managed Identity or AAD service principal, ensure the identity running the app has Storage Blob Data Reader/Contributor role on the storage account.
+    # For Windows test environment using Azure CLI, set the environment variable AZURE_CLI_TEST=true
+    container_name: "flussi" # The specific container to expose (e.g., "my-data-container")
+    permissions:             # Group -> permissions mapping for this specific storage instance
+      - group_id: "BSCONNECTIONUAT_RW_GROUP_ID" # Azure AD Group Object ID for read/write access
+        access: "write" # "read" or "write"
+      - group_id: "BSCONNECTIONUAT_RO_GROUP_ID" # Azure AD Group Object ID for read-only access
+        access: "read"
+      # If no permissions are listed for a storage, access is denied by default if auth is enabled.
+
+# Pagination Configuration
+pagination:
+  items_per_page: 50 # Number of items to show per page in file lists
+
+# HTTP Server Timeout Configuration (optional, defaults will be used if not set)
+# Use duration strings (e.g., "5s", "1m", "2h")
+timeouts:
+  read_timeout: "500s"  # Timeout for reading the entire request body
+  write_timeout: "1000s" # Timeout for writing the entire response (0s means no timeout, recommended for large downloads)
+  idle_timeout: "120s" # Timeout for keep-alive connections
+client_ping_interval_ms: 2000
+# Livello di logging (DEBUG o INFO)
+# DEBUG: Include log dettagliati per debugging.
+# INFO: Include solo log informativi generali.
+log_level: "DEBUG" # Imposta su "DEBUG" per log più dettagliati
+upload_cleanup_timeout: 111m
