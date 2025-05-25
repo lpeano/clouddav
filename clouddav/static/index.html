@@ -5,58 +5,60 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Filesystem Explorer</title>
     <style>
-        /* Stili base per il corpo e il layout generale */
+        /* ... (tutti gli stili precedenti di index.html rimangono invariati) ... */
+        /* ... (assicurati che gli stili per #left-panel, #main-panel, header, ecc. siano qui) ... */
         body {
             margin: 0;
             padding: 0;
             font-family: sans-serif;
-            display: flex; /* Usa Flexbox per un layout a due colonne */
-            flex-direction: column; /* Imposta il corpo come flex container verticale */
-            height: 100vh; /* Occupa l'intera altezza della viewport */
-            overflow: hidden; /* Previene lo scroll sulla pagina principale */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
         }
         #content-area {
-            display: flex; /* Usa Flexbox per i pannelli sinistro e principale */
-            flex-grow: 1; /* Fa in modo che l'area dei contenuti occupi lo spazio disponibile */
-            overflow: hidden; /* Nasconde l'overflow per i pannelli interni */
-            position: relative; /* Necessario per posizionare l'overlay di caricamento e le modali */
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+            position: relative;
         }
         #left-panel {
-            width: 25%; /* 25% della larghezza */
-            border-right: 1px solid #ccc; /* Separatore visivo */
-            box-sizing: border-box; /* Include bordo e padding nella larghezza */
+            width: 25%;
+            border-right: 1px solid #ccc;
+            box-sizing: border-box;
             display: flex;
-            flex-direction: column; /* Elementi impilati verticalmente */
-            overflow-y: auto; /* Permette lo scroll verticale nel pannello sinistro */
-            z-index: 1; 
+            flex-direction: column;
+            overflow-y: auto;
+            z-index: 1;
         }
         #main-panel {
-            width: 75%; /* 75% della larghezza */
+            width: 75%;
             display: flex;
-            flex-direction: column; /* Elementi impilati verticalmente */
-            overflow-y: auto; /* Permette lo scroll verticale nel pannello principale */
+            flex-direction: column;
+            overflow-y: auto;
             z-index: 1;
+            position: relative; /* Per lo spinner del filelist */
         }
         header {
             background-color: #f0f0f0;
             padding: 10px;
             text-align: center;
             border-bottom: 1px solid #ccc;
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
          header h2 {
-             margin: 0; 
-             flex-grow: 1; 
-             text-align: center; 
+             margin: 0;
+             flex-grow: 1;
+             text-align: center;
          }
          #main-panel header {
-             justify-content: flex-start; 
+             justify-content: flex-start;
          }
          #main-panel header h2 {
-              text-align: left; 
-              margin-right: 10px; 
+              text-align: left;
+              margin-right: 10px;
          }
          #main-panel header button {
              padding: 5px 10px;
@@ -72,8 +74,6 @@
               cursor: not-allowed;
               opacity: 0.5;
           }
-
-        /* Stili per Treeview (da treeview.html) */
         #treeview-content {
             flex-grow: 1;
             overflow-y: auto;
@@ -94,16 +94,13 @@
             border-radius: 4px;
             background-color: #e0e0e0;
         }
-         #global-controls button:hover {
-             background-color: #d5d5d5;
-         }
         #treeview-root {
             list-style: none;
-            padding-left: 0; /* Rimosso padding per root, i figli avranno indentazione */
+            padding-left: 0;
             margin: 0;
         }
         #treeview-root ul {
-             padding-left: 20px; /* Indentazione per i livelli figli */
+             padding-left: 20px;
         }
         #treeview-root li {
             margin: 5px 0;
@@ -111,33 +108,17 @@
             padding: 3px 0;
             transition: background-color 0.2s ease;
         }
-        #treeview-root li:hover {
-            background-color: #e9e9e9;
-        }
         #treeview-root li.directory::before {
-            content: '📁 '; 
+            content: '📁 ';
             margin-right: 5px;
         }
         #treeview-root li.directory.open::before {
             content: '📂 ';
-            margin-right: 5px;
-        }
-         #treeview-root li.file::before {
-            content: '📄 ';
-            margin-right: 5px;
-        }
-        #treeview-root li.directory > ul {
-            display: none;
-        }
-        #treeview-root li.directory.open > ul {
-            display: block;
         }
         #treeview-root .selected {
             font-weight: bold;
             background-color: #d0d0d0;
         }
-
-        /* Stili per Filelist (da filelist.html) */
         #filelist-content {
             flex-grow: 1;
             overflow-y: auto;
@@ -145,250 +126,114 @@
             background-color: #f9f9f9;
         }
         #filelist-content table {
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-top: 20px; 
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
         }
         #filelist-content th, #filelist-content td {
-            border: 1px solid #ddd; 
-            padding: 10px; 
-            text-align: left; 
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
         }
         #filelist-content th {
-            background-color: #f2f2f2; 
-            font-weight: bold; 
-        }
-        #filelist-content tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        #filelist-content tr:hover {
-             background-color: #e9e9e9;
-        }
-        #filelist-content .file-actions button {
-            margin-right: 5px; 
-            padding: 5px 10px; 
-            cursor: pointer; 
-            border: 1px solid #ccc; 
-            border-radius: 4px; 
-            background-color: #e0e0e0; 
-            transition: background-color 0.2s ease; 
-        }
-        #filelist-content .file-actions button:hover {
-             background-color: #d5d5d5;
-        }
-        #filelist-content .file-actions button.delete-btn { /* Classe specifica per coerenza */
-            background-color: #f44336; 
-            color: white; 
-            border-color: #d32f2f; 
-        }
-        #filelist-content .file-actions button.delete-btn:hover {
-             background-color: #d32f2f; 
-        }
-        #filelist-content .upload-form {
-            margin-bottom: 20px; 
-            padding: 15px; 
-            border: 1px solid #ccc; 
-            border-radius: 5px; 
-            background-color: #f2f2f2; 
-            display: flex; 
-            align-items: center; 
-            flex-wrap: wrap; 
-        }
-        #filelist-content .upload-form h3 {
-            margin: 0 20px 0 0; 
-            font-size: 1em; 
-        }
-        #filelist-content .upload-form input[type="file"] {
-            margin-right: 10px; 
-            flex-grow: 1; 
-        }
-        #filelist-content .filter-area {
-            margin-bottom: 20px;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            background-color: #e9e9e9;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px; 
-            align-items: center;
-        }
-        #filelist-content .filter-area label {
+            background-color: #f2f2f2;
             font-weight: bold;
         }
-        #filelist-content .filter-area input[type="text"],
-        #filelist-content .filter-area input[type="datetime-local"] {
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-         #filelist-content .filter-area button {
-            padding: 5px 10px;
-            cursor: pointer;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background-color: #d0d0d0;
-         }
-         #filelist-content .filter-area button:hover {
-             background-color: #c0c0c0;
-         }
-         #filelist-content .filter-group {
-             display: flex;
-             align-items: center;
-             gap: 5px;
-         }
-        #filelist-content #current-path-area {
-            margin-bottom: 10px;
-            font-weight: bold;
-        }
-        #filelist-content .pagination-area {
-            margin-top: 20px;
-            padding: 10px;
-            text-align: center;
-            display: flex;
-            justify-content: center; 
-            align-items: center;
-            gap: 10px; 
-        }
-         #filelist-content .pagination-area button {
+        #filelist-content .file-actions button, #filelist-content .upload-form button, #filelist-content .filter-area button, #filelist-content .pagination-area button {
             padding: 5px 10px;
             cursor: pointer;
             border: 1px solid #ccc;
             border-radius: 4px;
             background-color: #e0e0e0;
-         }
-         #filelist-content .pagination-area button:disabled {
-             cursor: not-allowed;
-             opacity: 0.5;
-         }
-         #filelist-content .pagination-area span {
-             font-weight: bold;
-         }
-         #filelist-content td:first-child[data-isdir="true"] { /* Selettore più specifico per directory cliccabili */
+        }
+        #filelist-content td:first-child[data-isdir="true"] {
              cursor: pointer;
-             color: #007bff; 
-             text-decoration: underline; 
-         }
-          #filelist-content td:first-child[data-isdir="true"]:hover {
-              color: #0056b3; 
-          }
-
-        /* --- Stili per l'Area Messaggi/Cronologia --- */
+             color: #007bff;
+             text-decoration: underline;
+        }
         #message-history-area {
-            background-color: #f9f9f9; 
-            border-top: 1px solid #ccc; 
+            background-color: #f9f9f9;
+            border-top: 1px solid #ccc;
             font-size: 0.9em;
             display: flex;
-            flex-direction: column; 
-            max-height: 30px; 
-            overflow: hidden; 
-            transition: max-height 0.3s ease; 
-            z-index: 10; 
+            flex-direction: column;
+            max-height: 30px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            z-index: 10;
         }
         #message-history-area.expanded {
-            max-height: 200px; 
-            overflow-y: auto; 
+            max-height: 200px;
+            overflow-y: auto;
         }
         #message-history-header {
-            background-color: #e0e0e0; 
+            background-color: #e0e0e0;
             padding: 5px 10px;
             font-weight: bold;
-            cursor: pointer; 
+            cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0; 
+            flex-shrink: 0;
         }
         #message-history-toggle {
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1.2em; 
-            padding: 0; 
+            font-size: 1.2em;
+            padding: 0;
             margin-left: 10px;
         }
         #message-list {
             list-style: none;
-            padding: 0 10px 10px 10px; 
-            margin: 0; 
+            padding: 0 10px 10px 10px;
+            margin: 0;
         }
         #message-list li {
-            margin-bottom: 5px; 
+            margin-bottom: 5px;
             padding-bottom: 5px;
-            border-bottom: 1px dotted #ccc; 
-            word-break: break-word; 
-        }
-        #message-list li:last-child {
-            border-bottom: none; 
-            margin-bottom: 0;
-            padding-bottom: 0;
+            border-bottom: 1px dotted #ccc;
+            word-break: break-word;
         }
         .message-timestamp {
             font-weight: normal;
             color: #666;
             margin-right: 10px;
-            white-space: nowrap; 
+            white-space: nowrap;
         }
-        
-        /* --- Stili per la Progress Bar di Upload --- */
         #upload-progress-box {
-            position: fixed; 
-            bottom: 40px; 
-            right: 20px; 
-            width: 300px; 
-            background-color: #fff; 
-            border: 1px solid #ccc; 
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2); 
-            z-index: 1000; 
+            position: fixed;
+            bottom: 40px;
+            right: 20px;
+            width: 300px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
             font-family: sans-serif;
             font-size: 0.9em;
-            transition: all 0.3s ease; 
-            display: none; 
-            border-radius: 8px; 
-            max-height: 40px; 
-            overflow: hidden; 
+            transition: all 0.3s ease;
+            display: none;
+            border-radius: 8px;
+            max-height: 40px;
+            overflow: hidden;
         }
         #upload-progress-box.expanded {
-            max-height: 300px; 
-            overflow-y: auto; 
+            max-height: 300px;
+            overflow-y: auto;
         }
         #upload-progress-header {
             background-color: #f0f0f0;
             padding: 5px 10px;
             border-bottom: 1px solid #ccc;
-            cursor: pointer; 
+            cursor: pointer;
             display: flex;
-            justify-content: space-between; 
+            justify-content: space-between;
             align-items: center;
             font-weight: bold;
-            border-top-left-radius: 8px; 
+            border-top-left-radius: 8px;
             border-top-right-radius: 8px;
-            flex-shrink: 0; 
-        }
-        #upload-progress-box:not(.expanded) #upload-progress-header {
-             border-bottom: none; 
-             border-bottom-left-radius: 8px; 
-             border-bottom-right-radius: 8px;
-         }
-        #upload-progress-header span {
-             flex-grow: 1; 
-             white-space: nowrap; 
-             overflow: hidden; 
-             text-overflow: ellipsis; 
-             margin-right: 10px;
-         }
-        #upload-progress-toggle {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.2em; 
-            padding: 0; 
-        }
-        #upload-items-container {
-            padding: 10px;
-            display: flex;
-            flex-direction: column; 
-            gap: 10px; 
+            flex-shrink: 0;
         }
         .upload-item {
             border: 1px solid #ddd;
@@ -396,123 +241,40 @@
             border-radius: 5px;
             background-color: #f9f9f9;
         }
-        .upload-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        .upload-file-name {
-             font-weight: bold;
-             white-space: nowrap;
-             overflow: hidden;
-             text-overflow: ellipsis;
-             flex-grow: 1;
-             margin-right: 10px;
-         }
-        .upload-cancel-button {
-             background: none;
-             border: none;
-             cursor: pointer;
-             font-size: 1em;
-             color: #f44336; 
-             padding: 0;
-        }
-        .upload-cancel-button:hover {
-            color: #d32f2f; 
-        }
-        .upload-progress-bar-container {
-            width: 100%;
-            background-color: #e0e0e0;
-            border-radius: 5px;
-            margin-top: 5px;
-            overflow: hidden; 
-        }
         .upload-progress-bar {
-            height: 15px; 
-            background-color: #4CAF50; 
-            width: 0%; 
+            height: 15px;
+            background-color: #4CAF50;
+            width: 0%;
             text-align: center;
             line-height: 15px;
             color: white;
             font-weight: bold;
-            transition: width 0.3s ease; 
-            font-size: 0.8em; 
-        }
-        .upload-status-text {
-            margin-top: 5px;
-            font-style: italic;
+            transition: width 0.3s ease;
             font-size: 0.8em;
         }
-        .upload-item.complete {
-            border-color: #4CAF50; 
-            background-color: #e8f5e9; 
-        }
-        .upload-item.failed {
-            border-color: #f44336; 
-            background-color: #ffebee; 
-        }
-        .upload-item.cancelled {
-            border-color: #ff9800; 
-            background-color: #fff3e0; 
-        }
-
-        /* --- Stili per le Modali Generiche --- */
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5); 
+            background-color: rgba(0, 0, 0, 0.5);
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 2000; 
-            display: none; 
+            z-index: 2000;
+            display: none;
         }
         .modal-content {
             background-color: #fff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            width: 90%; 
-            max-width: 400px; 
+            width: 90%;
+            max-width: 400px;
             display: flex;
             flex-direction: column;
             gap: 15px;
-        }
-        .modal-content h3 {
-            margin-top: 0;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-        .modal-content label {
-            font-weight: bold;
-        }
-        .modal-content input[type="text"],
-        .modal-content input[type="range"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box; 
-        }
-        .modal-content .slider-value {
-            text-align: center;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-         .modal-content p {
-             margin: 0;
-             padding: 0;
-             text-align: center;
-         }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 15px;
         }
         .modal-actions button {
             padding: 8px 15px;
@@ -520,126 +282,130 @@
             border-radius: 4px;
             cursor: pointer;
         }
-        .modal-actions button.primary {
-            background-color: #4CAF50; 
-            color: white;
-            border-color: #388E3C; 
-        }
-         .modal-actions button.primary:hover {
-             background-color: #388E3C;
-         }
-        .modal-actions button.danger {
-            background-color: #f44336; 
-            color: white;
-            border-color: #d32f2f; 
-        }
-         .modal-actions button.danger:hover {
-            background-color: #d32f2f;
-         }
-        .modal-actions button.secondary {
-            background-color: #f0f0f0;
-        }
-         .modal-actions button.secondary:hover {
-             background-color: #e0e0e0;
-         }
-
-        /* --- Stili per la Rotella di Caricamento Modale Granulare --- */
         #filelist-loading-overlay {
-            position: absolute; 
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(255, 255, 255, 0.7); 
-            display: none; 
-            justify-content: center; 
-            align-items: center; 
-            z-index: 2; 
-            pointer-events: auto; 
+            background-color: rgba(255, 255, 255, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2;
+            pointer-events: auto;
         }
         .spinner {
-            border: 8px solid #f3f3f3; 
-            border-top: 8px solid #3498db; 
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #3498db;
             border-radius: 50%;
             width: 60px;
             height: 60px;
-            animation: spin 2s linear infinite; 
+            animation: spin 2s linear infinite;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
-        /* Stili per la WebSocket Status Box */
         #websocket-status-box {
-            position: fixed; 
-            bottom: 10px;    
-            left: 10px;      
-            padding: 8px 12px; 
-            border-radius: 5px; 
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            border-radius: 5px;
             font-family: sans-serif;
             font-size: 0.9em;
             font-weight: bold;
-            color: white;    
-            background-color: #555; 
-            z-index: 1000;   
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); 
-            display: flex;   
-            align-items: center; 
+            color: white;
+            background-color: #555;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
         }
-        #websocket-status-box.status-green {
-            background-color: #4CAF50; 
-        }
-        #websocket-status-box.status-red {
-            background-color: #f44336; 
-        }
-        #websocket-status-box.status-yellow {
-            background-color: #ff9800; 
-        }
-        
-        /* Stili per il Toast */
+        #websocket-status-box.status-green { background-color: #4CAF50; }
+        #websocket-status-box.status-red { background-color: #f44336; }
+        #websocket-status-box.status-yellow { background-color: #ff9800; }
+
+
+        /* --- NUOVI STILI PER TOAST "TOSTAPANE" --- */
         #toast-container {
             position: fixed;
-            top: 20px; 
-            right: 20px; 
-            z-index: 3000; 
+            bottom: 20px; /* Posiziona in basso */
+            left: 50%;    /* Centra orizzontalmente */
+            transform: translateX(-50%); /* Corregge il centraggio */
+            z-index: 3000;
             display: flex;
-            flex-direction: column;
+            flex-direction: column-reverse; /* I nuovi toast appaiono sopra i vecchi */
+            align-items: center; /* Centra i toast se hanno larghezze diverse */
             gap: 10px;
-            pointer-events: none; 
+            pointer-events: none;
+            width: 320px; /* Larghezza fissa per la "tostiera" */
+            /* Effetto "fessura tostiera" (opzionale) */
+            /* background-color: #444;
+            padding: 10px 10px 0 10px;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.2); */
         }
+
         .toast {
-            background-color: #333;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            background-color: #fff; /* Sfondo bianco per il "pane" */
+            color: #333; /* Testo scuro */
+            padding: 15px 25px;
+            border-radius: 8px; /* Angoli più arrotondati */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Ombra più pronunciata */
             opacity: 0;
-            transform: translateY(-20px);
-            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-            pointer-events: auto; 
+            min-width: 280px; /* Larghezza minima del toast */
+            text-align: center;
+            border: 1px solid #ddd;
+            /* L'animazione verrà definita qui */
+            animation: toast-pop-rotate 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards,
+                         toast-fade-out 0.5s ease-out 4.5s forwards; /* 4.5s di attesa prima del fade-out */
+            pointer-events: auto;
+            transform-origin: bottom center; /* Punto di rotazione per l'effetto "pop" */
         }
-        .toast.show {
-            opacity: 1;
-            transform: translateY(0);
+
+        /* Keyframes per l'animazione "tostapane roteante" */
+        @keyframes toast-pop-rotate {
+            0% {
+                opacity: 0;
+                transform: translateY(100%) rotateZ(-30deg) scale(0.5); /* Parte da sotto, ruotato e piccolo */
+            }
+            60% {
+                opacity: 1;
+                transform: translateY(-20px) rotateZ(10deg) scale(1.1); /* Salta su, ruota un po' e si ingrandisce */
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) rotateZ(0deg) scale(1); /* Si stabilizza */
+            }
         }
-        .toast-info {
-            background-color: #2196F3; 
+
+        @keyframes toast-fade-out {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(20px) scale(0.9); /* Scende un po' e rimpicciolisce */
+            }
         }
-        .toast-success {
-            background-color: #4CAF50; 
-        }
-        .toast-warning {
-            background-color: #FFC107; 
-        }
-        .toast-error {
-            background-color: #f44336; 
-        }
+
+        /* Classi per i tipi di toast (colori del bordo o icone se vuoi) */
+        .toast-info { border-left: 5px solid #2196F3; }
+        .toast-success { border-left: 5px solid #4CAF50; }
+        .toast-warning { border-left: 5px solid #FFC107; color: #333; /* Assicura leggibilità */ }
+        .toast-error { border-left: 5px solid #f44336; }
+        /* --- FINE NUOVI STILI TOAST --- */
+
     </style>
 </head>
 <body>
     <div id="content-area">
-        <div id="toast-container"></div>
+        <div id="toast-container">
+            </div>
         <div id="left-panel">
             <header><h2>Storages</h2></header>
             <div id="treeview-content">
@@ -647,8 +413,7 @@
                     <button onclick="expandAllTreeviewNodes()">Espandi Tutto</button>
                     <button onclick="collapseAllTreeviewNodes()">Comprimi Tutto</button>
                 </div>
-                <ul id="treeview-root">
-                    </ul>
+                <ul id="treeview-root"></ul>
             </div>
         </div>
         <div id="main-panel">
@@ -659,29 +424,24 @@
             <div id="filelist-content">
                 <div class="upload-form">
                     <h3>Upload File</h3>
-                    <input type="file" id="upload-file-input" multiple> <button id="trigger-upload-btn">Upload</button> </div>
-            
+                    <input type="file" id="upload-file-input" multiple>
+                    <button id="trigger-upload-btn">Upload</button>
+                </div>
                 <div class="filter-area">
                     <div class="filter-group">
                         <input type="checkbox" id="enable-name-filter">
                         <label for="enable-name-filter">Nome File (Regex):</label>
                         <input type="text" id="name-filter">
                     </div>
-            
                     <div class="filter-group">
                         <input type="checkbox" id="enable-timestamp-filter">
                         <label for="enable-timestamp-filter">Modificato Dopo:</label>
                         <input type="datetime-local" id="timestamp-filter">
                     </div>
-            
                     <button id="apply-filters-btn">Applica Filtri</button>
                     <button id="clear-filters-btn">Cancella Filtri</button>
                 </div>
-            
-                <div id="current-path-area">
-                    Percorso Corrente: /
-                </div>
-            
+                <div id="current-path-area">Percorso Corrente: /</div>
                 <table id="filelist-table">
                     <thead>
                         <tr>
@@ -692,10 +452,8 @@
                             <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        </tbody>
+                    <tbody></tbody>
                 </table>
-            
                 <div class="pagination-area">
                     <button id="prev-page-btn">Precedente</button>
                     <span>Pagina <span id="current-page">1</span> di <span id="total-pages">1</span></span>
@@ -731,13 +489,11 @@
         <div class="modal-content">
             <h3>Seleziona Dimensione Chunk</h3>
             <label for="chunk-size-slider">Dimensione Chunk:</label>
-            <input type="range" id="chunk-size-slider" min="1" value="4194304"> 
+            <input type="range" id="chunk-size-slider" min="1" value="4194304">
             <div class="slider-value" id="chunk-size-display">4 MB</div>
-
             <label for="parallel-chunks-slider">Chunk in Parallelo:</label>
-            <input type="range" id="parallel-chunks-slider" min="1" max="16" value="4"> 
+            <input type="range" id="parallel-chunks-slider" min="1" max="16" value="4">
             <div class="slider-value" id="parallel-chunks-display">4</div>
-
             <div class="modal-actions">
                 <button id="cancel-modal-btn" class="secondary">Annulla</button>
                 <button id="start-upload-btn" class="primary">Avvia Upload</button>

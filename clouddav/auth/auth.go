@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io" // MODIFICA: Aggiunto import per io.ReadAll
 	"log"
 	"net/http"
 	"sync"
@@ -25,9 +25,9 @@ type ClaimsKey struct{}
 
 // Provider OIDC and OAuth2 configuration
 var (
-	provider     *oidc.Provider
-	oauth2Config oauth2.Config
-	stateStore   = make(map[string]time.Time)
+	provider        *oidc.Provider
+	oauth2Config    oauth2.Config
+	stateStore      = make(map[string]time.Time)
 	stateStoreMutex sync.Mutex
 )
 
@@ -63,7 +63,7 @@ func InitAzureAD(cfg *config.Config) error {
 		ClientSecret: cfg.AzureAD.ClientSecret,
 		RedirectURL:  cfg.AzureAD.RedirectURL,
 		Endpoint:     provider.Endpoint(),
-		Scopes: []string{oidc.ScopeOpenID, "profile", "email", "offline_access", "https://graph.microsoft.com/.default"},
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email", "offline_access", "https://graph.microsoft.com/.default"},
 	}
 	log.Printf("[DEBUG] InitAzureAD: oauth2Config initialized with ClientID: '%s', RedirectURL: '%s', Auth Endpoint URL: '%s'", oauth2Config.ClientID, oauth2Config.RedirectURL, oauth2Config.Endpoint.AuthURL)
 
@@ -94,7 +94,7 @@ func cleanupExpiredStates() {
 				}
 			}
 			stateStoreMutex.Unlock()
-		case <-context.Background().Done():
+		case <-context.Background().Done(): // Should ideally use a passed-in context for proper shutdown
 			if config.IsLogLevel(config.LogLevelInfo) {
 				log.Println("State cleanup goroutine stopping.")
 			}
@@ -191,7 +191,6 @@ func HandleCallback(ctx context.Context, r *http.Request) (*oidc.IDToken, string
 
 	accessToken, ok := oauth2Token.Extra("access_token").(string)
 	if !ok {
-		// L'Access Token è necessario per chiamare Graph, quindi è un errore critico.
 		return nil, "", errors.New("no access_token present in OAuth2 response")
 	}
 	if config.IsLogLevel(config.LogLevelDebug) {
@@ -216,10 +215,10 @@ func HandleCallback(ctx context.Context, r *http.Request) (*oidc.IDToken, string
 
 // UserClaims represents the user information extracted from the ID Token.
 type UserClaims struct {
-	Subject string   `json:"sub"`
-	Name    string   `json:"name"`
-	Email   string   `json:"email"`
-	Groups  []string `json:"groups"`      // IDs of the groups the user is a member of (per autorizzazione, se si usa ID)
+	Subject    string   `json:"sub"`
+	Name       string   `json:"name"`
+	Email      string   `json:"email"`
+	Groups     []string `json:"groups"`      // IDs of the groups the user is a member of (per autorizzazione, se si usa ID)
 	GroupNames []string `json:"group_names,omitempty"` // Nomi dei gruppi (per logging/UI e match per nome)
 }
 
@@ -271,7 +270,12 @@ func GetUserGroupsFromGraph(ctx context.Context, accessToken string) ([]string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		// MODIFICA: Sostituito ioutil.ReadAll con io.ReadAll
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			log.Printf("[DEBUG] GetUserGroupsFromGraph: Graph API request failed with status %d. Additionally, failed to read error body: %v", resp.StatusCode, readErr)
+			return nil, nil, fmt.Errorf("Graph API request failed with status %d and failed to read error body", resp.StatusCode)
+		}
 		if config.IsLogLevel(config.LogLevelDebug) {
 			log.Printf("[DEBUG] GetUserGroupsFromGraph: Graph API response error body: %s", string(bodyBytes))
 		}
@@ -318,8 +322,8 @@ func IsUserAuthorized(claims *UserClaims, cfg *config.Config) bool {
 	if config.IsLogLevel(config.LogLevelDebug) {
 		log.Printf("[DEBUG] IsUserAuthorized: Checking authorization for user '%s' (Email: %s).", claims.Subject, claims.Email)
 		log.Printf("[DEBUG] IsUserAuthorized: User's groups (IDs): %v", claims.Groups)
-		log.Printf("[DEBUG] IsUserAuthorized: User's groups (Names): %v", claims.GroupNames) // Logga anche i nomi
-		log.Printf("[DEBUG] IsUserAuthorized: Configured allowed groups (Names expected): %v", cfg.AzureAD.AllowedGroups) // Nota per i nomi
+		log.Printf("[DEBUG] IsUserAuthorized: User's groups (Names): %v", claims.GroupNames) 
+		log.Printf("[DEBUG] IsUserAuthorized: Configured allowed groups (Names expected): %v", cfg.AzureAD.AllowedGroups)
 	}
 
 	if len(cfg.AzureAD.AllowedGroups) == 0 {
@@ -329,24 +333,22 @@ func IsUserAuthorized(claims *UserClaims, cfg *config.Config) bool {
 		return true // No global groups required, any authenticated user is authorized
 	}
 
-	// Crea una mappa per una ricerca efficiente dei nomi dei gruppi dell'utente
 	userGroupNamesMap := make(map[string]bool)
 	for _, groupName := range claims.GroupNames {
 		userGroupNamesMap[groupName] = true
 	}
 
-	// Controlla se l'utente appartiene a uno dei gruppi consentiti (per nome)
 	for _, allowedGroupName := range cfg.AzureAD.AllowedGroups {
 		if userGroupNamesMap[allowedGroupName] {
 			if config.IsLogLevel(config.LogLevelDebug) {
 				log.Printf("[DEBUG] IsUserAuthorized: User '%s' is a member of allowed group name '%s'. Authorization granted.", claims.Email, allowedGroupName)
 			}
-			return true // L'utente appartiene ad almeno un gruppo consentito
+			return true 
 		}
 	}
 
 	if config.IsLogLevel(config.LogLevelDebug) {
 		log.Printf("[DEBUG] IsUserAuthorized: User '%s' is not a member of any configured allowed group (by Name). Authorization denied.", claims.Email)
 	}
-	return false // L'utente non appartiene a nessun gruppo consentito
+	return false 
 }

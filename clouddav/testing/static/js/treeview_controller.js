@@ -4,79 +4,129 @@
 (function() {
     const treeviewRoot = document.getElementById('treeview-root');
     let selectedTreeviewElement = null;
-    // Map to store the last request ID for a given directory path to avoid race conditions
-    const lastRequestIds = new Map(); 
+    const lastRequestIds = new Map(); // Map<pathKey, requestID>
 
     function notifyAppLogic(message, type = 'info') {
         if (window.addMessageToHistory) {
             window.addMessageToHistory(`Treeview: ${message}`, type);
         }
-        if (window.showToast) { // Assuming showToast is globally available from notification_service.js
+        if (window.showToast && (type === 'error' || type === 'warning')) {
             window.showToast(`Treeview: ${message}`, type);
         }
     }
 
-    // Exposed to app_logic.js
     window.handleTreeviewBackendResponse = (message) => {
         console.log('TreeviewCtrl - Backend message received:', message);
+        const { type, payload, request_id: messageRequestId } = message;
 
-        switch (message.type) {
-            case 'get_filesystems_response':
-                renderStorages(message.payload);
+        if (type === 'get_filesystems_response') {
+            if (payload && Array.isArray(payload)) {
+                renderStorages(payload);
                 notifyAppLogic('Elenco storage ricevuto.');
-                break;
-            case 'list_directory_response':
-                const storageNameForResponse = message.payload?.storage_name || (message.payload?.items && message.payload.items.length > 0 ? message.payload.items[0].path.split('/')[0] : null); // Infer storage name if possible
-                const dirPathForResponse = message.payload?.dir_path; // Path of the directory listed
-                const requestIdForResponse = message.request_id;
-
-                const mapKey = `${storageNameForResponse}:${dirPathForResponse}`;
-                const expectedRequestId = lastRequestIds.get(mapKey);
-                
-                const requestingElement = document.querySelector(`li[data-request-id="${requestIdForResponse}"]`);
-
-                if (!requestingElement) {
-                    console.warn(`TreeviewCtrl - No requesting element found for request ID: ${requestIdForResponse}. Response might be obsolete.`);
-                    return;
-                }
-
-                if (expectedRequestId && requestIdForResponse !== expectedRequestId) {
-                    console.warn(`TreeviewCtrl - Obsolete list_directory_response for "${mapKey}" (Req ID: ${requestIdForResponse}, Expected: ${expectedRequestId}). Ignoring.`);
-                    requestingElement.removeAttribute('data-request-id'); // Clean up attribute
-                    return;
-                }
-                
-                if (message.payload && Array.isArray(message.payload.items)) {
-                    renderDirectoryContent(requestingElement, message.payload.items);
-                    notifyAppLogic(`Contenuto directory "${requestingElement.dataset.path || '/'}" caricato.`);
-                } else {
-                    console.error('TreeviewCtrl - Invalid list_directory_response payload:', message.payload);
-                    notifyAppLogic('Errore nel caricare contenuto directory: dati non validi.', 'error');
-                }
-                requestingElement.removeAttribute('data-request-id');
-                lastRequestIds.delete(mapKey); // Clean up map entry
-                break;
-            case 'error':
-                console.error('TreeviewCtrl - Error from backend:', message.payload.error);
-                notifyAppLogic(`Errore dal backend: ${message.payload.error}`, 'error');
-                // If an error occurred for a specific request, clean up its request ID attribute
-                if (message.request_id) {
-                    const erroredElement = document.querySelector(`li[data-request-id="${message.request_id}"]`);
-                    if (erroredElement) {
-                        erroredElement.removeAttribute('data-request-id');
-                        const errStorage = erroredElement.dataset.storageName;
-                        const errPath = erroredElement.dataset.path;
-                        lastRequestIds.delete(`${errStorage}:${errPath}`);
-                    }
-                }
-                break;
+            } else {
+                console.error('TreeviewCtrl - Invalid get_filesystems_response payload:', payload);
+                notifyAppLogic('Errore nel caricare elenco storage: dati non validi.', 'error');
+            }
+            return;
         }
+
+        if (!messageRequestId) {
+            console.warn(`TreeviewCtrl - Message type ${type} received without request_id. Ignoring.`);
+            return;
+        }
+
+        let pathKeyForThisResponse = null;
+        let responseStorageName = null;
+        let responseDirPath = null;
+        let targetElementForErrorCleanup = null; // Elemento da pulire in caso di errore generico
+
+        if (type === 'list_directory_response') {
+            if (payload && typeof payload.storage_name === 'string' && typeof payload.dir_path === 'string') {
+                responseStorageName = payload.storage_name;
+                responseDirPath = payload.dir_path;
+                pathKeyForThisResponse = `${responseStorageName}:${responseDirPath}`;
+            } else {
+                console.error(`TreeviewCtrl - list_directory_response (ID: ${messageRequestId}) MISSING storage_name or dir_path in payload. Payload received:`, JSON.stringify(payload));
+                // Tentativo di fallback: trovare il pathKey cercando l'ID nella mappa, sebbene meno affidabile.
+                lastRequestIds.forEach((reqId, pk) => {
+                    if (reqId === messageRequestId) {
+                        pathKeyForThisResponse = pk;
+                        const parts = pk.split(':');
+                        responseStorageName = parts[0];
+                        responseDirPath = parts.slice(1).join(':'); // Gestisce i due punti nel percorso, anche se improbabile per dirPath
+                        console.warn(`TreeviewCtrl - Fallback: Found pathKey "${pathKeyForThisResponse}" for ID ${messageRequestId} by searching map.`);
+                    }
+                });
+                if (!pathKeyForThisResponse) {
+                    notifyAppLogic(`Risposta directory (ID: ${messageRequestId}) ricevuta senza informazioni di percorso sufficienti. Impossibile elaborare.`, 'error');
+                    return; // Non possiamo procedere in modo affidabile
+                }
+            }
+        } else if (type === 'error') {
+            lastRequestIds.forEach((reqId, pk) => {
+                if (reqId === messageRequestId) {
+                    pathKeyForThisResponse = pk;
+                    const parts = pk.split(':');
+                    responseStorageName = parts[0];
+                    responseDirPath = parts.slice(1).join(':');
+                }
+            });
+            if (!pathKeyForThisResponse) {
+                console.warn(`TreeviewCtrl - Error message (ID: ${messageRequestId}) received, but no pending request found for this ID in lastRequestIds. Error:`, payload ? payload.error : "Unknown error");
+                // Se un elemento DOM è ancora taggato con questo ID orfano, puliscilo.
+                const orphanedElement = document.querySelector(`li[data-pending-request-id="${messageRequestId}"]`); // Vecchio attributo, per pulizia
+                if (orphanedElement) orphanedElement.removeAttribute('data-pending-request-id');
+                return;
+            }
+        } else {
+            console.warn(`TreeviewCtrl - Unhandled message type ${type} with request_id ${messageRequestId}. Ignoring.`);
+            return;
+        }
+
+        const latestExpectedRequestIdForPath = lastRequestIds.get(pathKeyForThisResponse);
+
+        if (latestExpectedRequestIdForPath !== messageRequestId) {
+            // Questo log è quello che vedi: "path: undefined:undefined" se pathKeyForThisResponse non è stato derivato correttamente.
+            console.warn(`TreeviewCtrl - Response for ID ${messageRequestId} (path: ${pathKeyForThisResponse}) is NOT the latest expected ID (${latestExpectedRequestIdForPath || 'none'}) for this path. Ignoring as obsolete.`);
+            return;
+        }
+
+        const targetElement = document.querySelector(`li[data-storage-name="${responseStorageName}"][data-path="${responseDirPath}"]`);
+
+        if (!targetElement) {
+            console.warn(`TreeviewCtrl - Target DOM element for path ${pathKeyForThisResponse} not found, though response ID ${messageRequestId} was expected. Tree might have been re-rendered. Cleaning up request ID from map.`);
+            lastRequestIds.delete(pathKeyForThisResponse);
+            return;
+        }
+        targetElementForErrorCleanup = targetElement; // Salva per la pulizia in caso di errore
+
+        if (type === 'list_directory_response') {
+            if (payload && Array.isArray(payload.items)) {
+                renderDirectoryContent(targetElement, payload.items);
+                notifyAppLogic(`Contenuto directory "${responseDirPath || responseStorageName || '/'}" caricato.`);
+            } else {
+                console.error('TreeviewCtrl - Invalid list_directory_response payload items (after pathKey check):', payload);
+                notifyAppLogic('Errore nel caricare contenuto directory: dati non validi.', 'error');
+                targetElement.classList.remove('open');
+                const ul = targetElement.querySelector('ul');
+                if (ul) ul.innerHTML = '';
+            }
+        } else if (type === 'error') { // Errore specifico per questa richiesta/percorso
+            console.error(`TreeviewCtrl - Error from backend for path ${pathKeyForThisResponse} (Req ID: ${messageRequestId}):`, payload.error);
+            notifyAppLogic(`Errore caricamento directory ${pathKeyForThisResponse}: ${payload.error}`, 'error');
+            if (targetElementForErrorCleanup) {
+                targetElementForErrorCleanup.classList.remove('open');
+                const ul = targetElementForErrorCleanup.querySelector('ul');
+                if (ul) ul.innerHTML = '';
+            }
+        }
+
+        lastRequestIds.delete(pathKeyForThisResponse); // Richiesta gestita (successo o errore specifico)
     };
 
-    // Exposed to app_logic.js
     window.requestInitialTreeviewData = () => {
         notifyAppLogic('Richiesta elenco storage...');
-        if (window.sendMessage) { // sendMessage is from websocket_service.js
+        if (window.sendMessage) {
             window.sendMessage({ type: 'get_filesystems' });
         } else {
             console.error('TreeviewCtrl - sendMessage function is not available.');
@@ -85,6 +135,10 @@
     };
 
     function renderStorages(storages) {
+        if (!treeviewRoot) {
+            console.error("TreeviewCtrl - treeviewRoot element not found in DOM.");
+            return;
+        }
         treeviewRoot.innerHTML = '';
         if (!Array.isArray(storages)) {
             console.error('TreeviewCtrl - storages argument is not an array:', storages);
@@ -96,10 +150,10 @@
             li.classList.add('directory');
             li.textContent = storageCfg.name;
             li.dataset.storageName = storageCfg.name;
-            li.dataset.path = ''; 
+            li.dataset.path = '';
             li.dataset.storageType = storageCfg.type;
             li.addEventListener('click', handleTreeviewItemClick);
-            
+
             const ul = document.createElement('ul');
             li.appendChild(ul);
             treeviewRoot.appendChild(li);
@@ -119,24 +173,52 @@
         const storageName = clickedElement.dataset.storageName;
         const itemPath = clickedElement.dataset.path;
         const storageType = clickedElement.dataset.storageType;
-        
-        if (window.handleTreeviewSelect) { // Function in app_logic.js
+
+        if (window.handleTreeviewSelect) {
             window.handleTreeviewSelect(storageName, itemPath, storageType);
         }
 
         if (clickedElement.classList.contains('directory')) {
-            toggleDirectory(clickedElement);
+            if (event.target === clickedElement || clickedElement.contains(event.target)) {
+                 toggleDirectory(clickedElement);
+            }
         }
     }
 
     function toggleDirectory(directoryElement) {
-        directoryElement.classList.toggle('open');
+        const isOpen = directoryElement.classList.contains('open');
         const ul = directoryElement.querySelector('ul');
 
-        if (directoryElement.classList.contains('open') && ul && ul.children.length === 0 && !directoryElement.dataset.requestId) {
+        if (!ul) {
+            console.error("TreeviewCtrl - Elemento ul mancante per la directory:", directoryElement);
+            return;
+        }
+
+        if (isOpen) {
+            directoryElement.classList.remove('open');
+            return;
+        }
+
+        directoryElement.classList.add('open');
+
+        let hasChildElements = false;
+        for (let i = 0; i < ul.childNodes.length; i++) {
+            if (ul.childNodes[i].nodeType === Node.ELEMENT_NODE) {
+                hasChildElements = true;
+                break;
+            }
+        }
+
+        if (!hasChildElements) {
             const storageName = directoryElement.dataset.storageName;
             const itemPath = directoryElement.dataset.path;
-            
+            const pathKey = `${storageName}:${itemPath}`;
+
+            if (lastRequestIds.has(pathKey)) {
+                console.log(`TreeviewCtrl - Richiesta per il percorso ${pathKey} (ID: ${lastRequestIds.get(pathKey)}) è già considerata in corso. Ignorata nuova richiesta.`);
+                return;
+            }
+
             notifyAppLogic(`Richiesta contenuto directory per "${itemPath || storageName || '/'}"...`);
             if (window.sendMessage) {
                 const requestID = window.sendMessage({
@@ -145,39 +227,30 @@
                         storage_name: storageName,
                         dir_path: itemPath,
                         page: 1,
-                        items_per_page: 1000, // Request more items for treeview, pagination not typical here
+                        items_per_page: 1000,
                         name_filter: '',
                         timestamp_filter: ''
                     }
                 });
-                directoryElement.dataset.requestId = requestID;
-                lastRequestIds.set(`${storageName}:${itemPath}`, requestID); // Store the latest request ID for this path
+                lastRequestIds.set(pathKey, requestID);
             } else {
                  console.error('TreeviewCtrl - sendMessage function is not available for list_directory.');
                  notifyAppLogic('Errore: Funzione sendMessage non disponibile.', 'error');
+                 directoryElement.classList.remove('open');
             }
         }
     }
 
     function renderDirectoryContent(directoryElement, items) {
         const ul = directoryElement.querySelector('ul');
-        if (!ul) return;
-        ul.innerHTML = ''; 
+        if (!ul) {
+            console.error("TreeviewCtrl - Cannot render content, ul not found for:", directoryElement);
+            return;
+        }
+        ul.innerHTML = '';
 
-        const currentPath = directoryElement.dataset.path;
         const storageName = directoryElement.dataset.storageName;
         const storageType = directoryElement.dataset.storageType;
-
-        if (currentPath !== '') {
-            const parentLi = document.createElement('li');
-            parentLi.classList.add('directory');
-            parentLi.textContent = '..';
-            parentLi.dataset.storageName = storageName;
-            parentLi.dataset.path = currentPath.substring(0, currentPath.lastIndexOf('/'));
-            parentLi.dataset.storageType = storageType;
-            parentLi.addEventListener('click', handleTreeviewItemClick);
-            ul.appendChild(parentLi);
-        }
 
         items.sort((a, b) => {
             if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
@@ -185,7 +258,7 @@
         });
 
         items.forEach(item => {
-            if (!item.is_dir) return; // Only show directories in treeview
+            if (!item.is_dir) return;
 
             const li = document.createElement('li');
             li.textContent = item.name;
@@ -193,7 +266,7 @@
             li.dataset.path = item.path;
             li.dataset.storageType = storageType;
             li.classList.add('directory');
-            
+
             const childUl = document.createElement('ul');
             li.appendChild(childUl);
             li.addEventListener('click', handleTreeviewItemClick);
@@ -201,18 +274,16 @@
         });
     }
 
-    // Global controls
     window.expandAllTreeviewNodes = () => {
+        if (!treeviewRoot) return;
         notifyAppLogic('Espansione di tutti i nodi del treeview...');
-        treeviewRoot.querySelectorAll('li.directory').forEach(dirEl => {
-            if (!dirEl.classList.contains('open')) {
-                // Simulate a click to trigger loading if necessary
-                dirEl.click(); // This will call handleTreeviewItemClick, then toggleDirectory
-            }
+        treeviewRoot.querySelectorAll('li.directory:not(.open)').forEach(dirEl => {
+            dirEl.click();
         });
     };
 
     window.collapseAllTreeviewNodes = () => {
+        if (!treeviewRoot) return;
         notifyAppLogic('Compressione di tutti i nodi del treeview...');
         treeviewRoot.querySelectorAll('li.directory.open').forEach(dirEl => {
             dirEl.classList.remove('open');

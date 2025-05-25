@@ -369,8 +369,8 @@ function updateWebSocketStatusUI(status, message) {
         case 'ws_connecting':
             websocketStatusBox.classList.add('status-yellow');
             break;
-        default: 
-            websocketStatusBox.classList.add('status-grey'); 
+        default:
+            websocketStatusBox.classList.add('status-grey');
             break;
     }
 }
@@ -401,28 +401,26 @@ window.handleTreeviewSelect = handleTreeviewSelect;
 
 // Centralized backend message handler
 window.handleBackendMessage = (message) => {
-    console.log('AppLogic - Backend message received:', message);
+    console.log('AppLogic - Backend message received:', message); // Questa riga corrisponde a app_logic.js:404
     if (window.addMessageToHistory) {
         addMessageToHistory(`Backend: ${message.type} (ID: ${message.request_id || 'N/A'})`);
     }
 
-    // Inoltra 'list_directory_response' a entrambi i controller.
-    // Ogni controller verificherà se il request_id è di sua competenza.
     if (message.type === 'list_directory_response') {
-        if (window.handleTreeviewBackendResponse) { // from treeview_controller.js
+        if (window.handleTreeviewBackendResponse) {
             window.handleTreeviewBackendResponse(message);
         }
-        if (window.handleFilelistBackendResponse) { // from filelist_controller.js
+        if (window.handleFilelistBackendResponse) {
             window.handleFilelistBackendResponse(message);
         }
-    } else if (message.type === 'get_filesystems_response') { // Specifico per treeview
-        if (window.handleTreeviewBackendResponse) { // from treeview_controller.js
+    } else if (message.type === 'get_filesystems_response') {
+        if (window.handleTreeviewBackendResponse) {
             window.handleTreeviewBackendResponse(message);
         }
     } else if (message.type === 'create_directory_response' ||
                message.type === 'delete_item_response' ||
-               message.type === 'check_directory_contents_response') {
-        if (window.handleFilelistBackendResponse) { // from filelist_controller.js
+               message.type === 'check_directory_contents_request_response') { // <<< MODIFICA QUI
+        if (window.handleFilelistBackendResponse) {
             window.handleFilelistBackendResponse(message);
         }
     } else if (message.type === 'pong') {
@@ -438,22 +436,28 @@ window.handleBackendMessage = (message) => {
         if (window.showToast) {
             window.showToast(`Errore dal Backend: ${message.payload ? message.payload.error : 'Errore sconosciuto'}`, 'error');
         }
-        // Permetti ai controller di gestire errori specifici
         if (window.handleTreeviewBackendResponse) {
-            window.handleTreeviewBackendResponse(message); // Passa l'intero messaggio
+            window.handleTreeviewBackendResponse(message);
         }
         if (window.handleFilelistBackendResponse) {
-            window.handleFilelistBackendResponse(message); // Passa l'intero messaggio
+            window.handleFilelistBackendResponse(message);
         }
-        
-        // Logica euristica per nascondere lo spinner del filelist se l'errore non è gestito specificamente
-        const isTreeviewReq = message.request_id && document.querySelector(`li[data-request-id="${message.request_id}"]`);
-        const isFilelistReq = message.request_id && window.lastFilelistRequestId === message.request_id;
-        if (!isTreeviewReq && !isFilelistReq) { // Se l'errore non sembra legato a una richiesta specifica tracciata
-            if(window.hideFilelistLoadingSpinner) window.hideFilelistLoadingSpinner();
+
+        let isErrorHandledByController = false;
+        if (message.request_id) {
+            if (document.querySelector(`li[data-request-id="${message.request_id}"]`)) {
+                // Treeview might handle its spinner
+            }
+            if (window.lastFilelistRequestId === message.request_id) {
+                isErrorHandledByController = true;
+            }
+        }
+        if (!isErrorHandledByController && window.hideFilelistLoadingSpinner) {
+            window.hideFilelistLoadingSpinner();
         }
     } else {
-        console.warn(`AppLogic - Unhandled backend message type: ${message.type}`);
+        // QUESTA RIGA (o simile) corrisponde a app_logic.js:472 nel tuo log se il tipo non è gestito
+        console.warn(`AppLogic - Unhandled backend message type: ${message.type}`, message);
     }
 };
 

@@ -13,7 +13,7 @@
     const websocketUrl = `${websocketProtocol}//${window.location.host}/ws`;
 
     const pingTimestamps = new Map();
-    let serverPingIntervalMs = 10000; // Default, will be updated by server
+    let serverPingIntervalMs = 2000; // Default, will be updated by server
     let clientPingIntervalId = null;
 
     function notifyConnectionStatusToApp(status, details = {}) {
