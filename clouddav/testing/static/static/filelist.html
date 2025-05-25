@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File List</title>
+    <style>
+        /* Stili base per il corpo e la tabella */
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 10px;
+            overflow-y: auto; /* Permette lo scroll verticale nella lista file */
+            background-color: #f9f9f9; /* Leggero sfondo per distinguere */
+        }
+        /* Stili per la tabella */
+        table {
+            width: 100%; /* Occupa l'intera larghezza disponibile */
+            border-collapse: collapse; /* Rimuove lo spazio tra i bordi delle celle */
+            margin-top: 20px; /* Spazio sopra la tabella */
+        }
+        /* Stili per le celle dell'intestazione e dei dati */
+        th, td {
+            border: 1px solid #ddd; /* Bordo sottile */
+            padding: 10px; /* Spazio interno alle celle */
+            text-align: left; /* Allinea il testo a sinistra */
+        }
+        /* Stili per l'intestazione della tabella */
+        th {
+            background-color: #f2f2f2; /* Sfondo grigio chiaro */
+            font-weight: bold; /* Testo in grassetto */
+        }
+        /* Stili per le righe pari (per una migliore leggibilità) */
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        /* Stile al passaggio del mouse sulle righe (opzionale) */
+        tr:hover {
+             background-color: #e9e9e9;
+        }
+        /* Stili per i pulsanti di azione */
+        .file-actions button {
+            margin-right: 5px; /* Spazio tra i pulsanti */
+            padding: 5px 10px; /* Padding interno */
+            cursor: pointer; /* Indica che l'elemento è cliccabile */
+            border: 1px solid #ccc; /* Bordo sottile */
+            border-radius: 4px; /* Angoli arrotondati */
+            background-color: #e0e0e0; /* Sfondo grigio */
+            transition: background-color 0.2s ease; /* Animazione al passaggio del mouse */
+        }
+         /* Stile al passaggio del mouse sui pulsanti */
+        .file-actions button:hover {
+             background-color: #d5d5d5;
+        }
+        /* Stile specifico per il pulsante Elimina */
+        .file-actions button:last-child {
+            background-color: #f44336; /* Rosso */
+            color: white; /* Testo bianco */
+            border-color: #d32f2f; /* Bordo rosso scuro */
+        }
+        .file-actions button:last-child:hover {
+             background-color: #d32f2f; /* Rosso scuro al passaggio del mouse */
+        }
+        /* Stili per il form di upload */
+        .upload-form {
+            margin-bottom: 20px; /* Spazio sotto il form */
+            padding: 15px; /* Padding interno */
+            border: 1px solid #ccc; /* Bordo */
+            border-radius: 5px; /* Angoli arrotondati */
+            background-color: #f2f2f2; /* Sfondo leggero */
+            display: flex; /* Usa Flexbox per allineare gli elementi */
+            align-items: center; /* Centra verticalmente gli elementi */
+            flex-wrap: wrap; /* Permette agli elementi di andare a capo su schermi piccoli */
+        }
+        .upload-form h3 {
+            margin: 0 20px 0 0; /* Margine a destra del titolo */
+            font-size: 1em; /* Dimensione del font */
+        }
+        .upload-form input[type="file"] {
+            margin-right: 10px; /* Spazio tra input file e pulsante */
+            flex-grow: 1; /* Permette all'input file di occupare lo spazio disponibile */
+        }
+
+        /* Stili per l'area filtri */
+        .filter-area {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #e9e9e9;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px; /* Spazio tra gli elementi del filtro */
+            align-items: center;
+        }
+        .filter-area label {
+            font-weight: bold;
+        }
+        .filter-area input[type="text"],
+        .filter-area input[type="datetime-local"] {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+         .filter-area button {
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #d0d0d0;
+         }
+         .filter-area button:hover {
+             background-color: #c0c0c0;
+         }
+         /* Stili per il raggruppamento checkbox + input */
+         .filter-group {
+             display: flex;
+             align-items: center;
+             gap: 5px;
+         }
+
+        /* Stili per l'area percorso corrente */
+        #current-path-area {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+
+        /* Stili per l'area paginazione */
+        .pagination-area {
+            margin-top: 20px;
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            justify-content: center; /* Centra gli elementi di paginazione */
+            align-items: center;
+            gap: 10px; /* Spazio tra gli elementi */
+        }
+         .pagination-area button {
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #e0e0e0;
+         }
+         .pagination-area button:disabled {
+             cursor: not-allowed;
+             opacity: 0.5;
+         }
+         .pagination-area span {
+             font-weight: bold;
+         }
+
+
+         /* Stile per il nome della cartella nella lista file (cliccabile) */
+         td:first-child[style*="font-weight: bold;"] {
+             cursor: pointer;
+             color: #007bff; /* Colore blu per indicare cliccabilità */
+             text-decoration: underline; /* Sottolinea per indicare cliccabilità */
+         }
+          td:first-child[style*="font-weight: bold;"]:hover {
+              color: #0056b3; /* Colore blu più scuro al passaggio del mouse */
+          }
+    </style>
+</head>
+<body>
+
+    <div class="upload-form">
+        <h3>Upload File</h3>
+        <input type="file" id="upload-file-input">
+        <button onclick="uploadFile()">Upload</button>
+    </div>
+
+    <div class="filter-area">
+        <div class="filter-group">
+            <input type="checkbox" id="enable-name-filter">
+            <label for="enable-name-filter">Nome File (Regex):</label>
+            <input type="text" id="name-filter">
+        </div>
+
+        <div class="filter-group">
+            <input type="checkbox" id="enable-timestamp-filter">
+            <label for="enable-timestamp-filter">Modificato Dopo:</label>
+            <input type="datetime-local" id="timestamp-filter">
+        </div>
+
+
+        <button onclick="applyFilters()">Applica Filtri</button>
+        <button onclick="clearFilters()">Cancella Filtri</button>
+    </div>
+
+    <div id="current-path-area">
+        Percorso Corrente: /
+    </div>
+
+
+    <table id="filelist-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Modified</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            </tbody>
+    </table>
+
+    <div class="pagination-area">
+        <button id="prev-page-btn" onclick="prevPage()">Precedente</button>
+        <span>Pagina <span id="current-page">1</span> di <span id="total-pages">1</span></span>
+        <button id="next-page-btn" onclick="nextPage()">Successiva</button>
+    </div>
+    <script src="/js/filelist.js"></script>
+</body>
+</html>

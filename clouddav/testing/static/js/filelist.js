@@ -1,5 +1,6 @@
 // filelist.js
 // Gestisce la logica della lista file nell'iframe centrale, l'upload file tramite HTTP, paginazione e filtri.
+
 const filelistTableBody = document.getElementById('filelist-table').querySelector('tbody');
 const uploadFileInput = document.getElementById('upload-file-input');
 const nameFilterInput = document.getElementById('name-filter');
@@ -12,13 +13,15 @@ const currentPageSpan = document.getElementById('current-page');
 const totalPagesSpan = document.getElementById('total-pages');
 const currentPathArea = document.getElementById('current-path-area'); // Riferimento all'area percorso corrente
 
-let lastListDirectoryRequestId = null; // Variabile per tracciare l'ID dell'ultima richiesta list_directory valida
 
-let currentPage = 1; // Pagina corrente (1-based)
+let currentPage = 1;
+// Pagina corrente (1-based)
 let itemsPerPage = 50; // Elementi per pagina (sarà aggiornato dalla configuratoine del backend)
-let totalItems = 0; // Totale elementi (prima della paginazione)
+let totalItems = 0;
+// Totale elementi (prima della paginazione)
 let nameFilter = ''; // Filtro per nome (regex) - applicato solo se checkbox attiva
-let timestampFilter = ''; // Filtro per timestamp (stringa RFC3339) - applicato solo se checkbox attiva
+let timestampFilter = '';
+// Filtro per timestamp (stringa RFC3339) - applicato solo se checkbox attiva
 
 // Variabili per tenere traccia dello storage e percorso corrente
 let currentStorageName = '';
@@ -34,21 +37,14 @@ const ongoingUploads = new Map(); // Map<uploadId, { file: File, uploadedSize: n
 // Sovrascrive la funzione handleBackendMessage definita nella pagina principale
 // Questa funzione viene chiamata dalla pagina principale quando un messaggio è ricevuto dal backend
 window.handleBackendMessage = (message) => {
-  // console.log('Filelist - Messaggio backend ricevuto:', message); // Log rimosso per ridurre verbosità
-  // Controlla il tipo di messaggio ricevuto dal backend
+  // console.log('Filelist - Messaggio backend ricevuto:', message); // Log rimosso
+  // Controlla il tipo de messaggio ricevuto dal backend
   switch (message.type) {
     case 'list_directory_response':
-      // Se la risposta ha un request_id e NON corrisponde all'ultima richiesta valida inviata,
-      // significa che è una risposta obsoleta (l'utente ha già cliccato su un'altra cartella).
-      // In questo caso, la risposta viene ignorata per evitare "flash" di UI non pertinenti.
-      if (message.request_id && message.request_id !== lastListDirectoryRequestId) {
-          console.warn(`Filelist - Ignorata risposta list_directory obsoleta (ID: ${message.request_id}). Atteso: ${lastListDirectoryRequestId}`);
-          // Assicurati che lo spinner venga nascosto anche per le risposte obsolete
-          notifyParentSpinner('hide_loading_spinner');
-          return; // Ignora la risposta e esci dalla funzione
-      }
+      // console.log('Filelist - Payload list_directory_response:', message.payload); // Log rimosso
 
-      // Se la risposta è valida (corrisponde all'ultima richiesta), procedi con il rendering della lista file.
+      // Se la risposta contiene la lista file paginata e filtrata
+      // CORREZIONE: Accedi alle chiavi JSON minuscole
       if (message.payload && Array.isArray(message.payload.items)) { // Usare message.payload.items (minuscolo) e verificare che sia un array
         renderFileList(message.payload.items); // Renderizza solo gli items della pagina corrente
         totalItems = message.payload.total_items; // Usare message.payload.total_items (minuscolo)
@@ -58,37 +54,36 @@ window.handleBackendMessage = (message) => {
       } else {
         console.error('Filelist - Ricevuta list_directory_response con struttura payload non valida:', message.payload); // Log de error mantenido
         // Opzionalmente mostra un messaggio de errore all'utente
-        if (window.parent && window.parent.showToast) {
-            window.parent.showToast('Errore nel caricare la lista file: struttura dati non valida.', 'error');
-        }
+        // alert('Errore nel caricare la lista file: struttura dati non valida.');
         renderFileList([]); // Renderizza una lista vuota per pulire la tabella
         totalItems = 0;
         currentPage = 1;
         updatePaginationControls();
       }
-      // Nasconde la rotella di caricamento dopo aver ricevuto e processato la risposta valida
-      notifyParentSpinner('hide_loading_spinner');
+             // Nasconde la rotella di caricamento dopo aver ricevuto la risposta
+             notifyParentSpinner('hide_loading_spinner');
       break;
     case 'create_directory_response':
       // Se la risposta indica che una directory è stata creata con successo
       console.log('Directory creata con successo:', message.payload); // Log mantenuto
-      // Notifica la pagina principale per loggare l'operazione
-      notifyFileOperationStatus('create_directory', message.payload.dir_path, 'success', null, message.payload.name); // Passa il nome della cartella
+             // Notifica la pagina principale per loggare l'operazione
+             notifyFileOperationStatus('create_directory', message.payload.dir_path, 'success');
       // Dopo la creazione, ricarica la lista file (torna alla prima pagina con i filtri correnti)
       resetPaginationAndLoadFiles();
       break;
     case 'delete_item_response':
       // Se la risposta indica che un elemento è stato eliminato con successo
       console.log('Elemento eliminato con successo:', message.payload); // Log mantenuto
-      // Notifica la pagina principale per loggare l'operazione
-      notifyFileOperationStatus('delete_item', message.payload.item_path, 'success', null, message.payload.name); // Passa il nome dell'elemento
+             // Notifica la pagina principale per loggare l'operazione
+             notifyFileOperationStatus('delete_item', message.payload.item_path, 'success');
       // Dopo l'eliminazione, ricarica la lista file (torna alla prima pagina con i filtri correnti)
       resetPaginationAndLoadFiles();
       break;
-    case 'check_directory_contents_response':
+        case 'check_directory_contents_response':
             const { has_contents } = message.payload;
             const { storageName, itemPath, itemName, isDirectory } = ongoingDeleteCheck;
             ongoingDeleteCheck = null;
+
             if (has_contents) {
                 if (window.parent && window.parent.postMessage) {
                     window.parent.postMessage({
@@ -117,21 +112,20 @@ window.handleBackendMessage = (message) => {
             break;
     case 'error':
       console.error('Filelist - Errore dal backend:', message.payload.error);
-      // Utilizza i toast per le notifiche di errore non bloccanti
-      if (window.parent && window.parent.showToast) {
-        window.parent.showToast('Errore: ' + message.payload.error, 'error');
-      }
-      // Notifica lo stato dell'operazione per la cronologia messaggi
-      notifyFileOperationStatus('backend_error', null, 'error', message.payload.error); // Mantieni per la cronologia
-      // Assicurati di nascondere lo spinner in caso di errore
-      notifyParentSpinner('hide_loading_spinner');
+            if (message.payload.error && message.payload.error.includes("è già in fase di caricamento da parte di")) {
+                alert(`Errore di caricamento: ${message.payload.error}`);
+            } else {
+          alert('Errore: ' + message.payload.error);
+            }
+             notifyFileOperationStatus('backend_error', null, 'error', message.payload.error);
+             notifyParentSpinner('hide_loading_spinner');
       break;
   }
 };
 
 let ongoingDeleteCheck = null;
 
-function notifyFileOperationStatus(operation, itemPath, status, error = null, filename = null) {
+function notifyFileOperationStatus(operation, itemPath, status, error = null) {
     if (window.parent && window.parent.postMessage) {
         window.parent.postMessage({
             type: 'file_operation_status',
@@ -139,35 +133,10 @@ function notifyFileOperationStatus(operation, itemPath, status, error = null, fi
                 operation: operation,
                 itemPath: itemPath,
                 status: status,
-                error: error,
-                filename: filename // Passa il nome del file per messaggi più specifici
+                error: error
             }
         }, '*');
     }
-    // Usa showToast per notifiche all'utente (non bloccanti)
-    if (window.parent && window.parent.showToast) {
-        let toastType = 'info';
-        let message = `Operazione ${operation} su ${itemPath} ${status}.`;
-        if (status === 'success') {
-            toastType = 'success';
-            message = `Operazione ${operation} su "${filename || itemPath}" completata con successo.`;
-        } else if (status === 'error') {
-            toastType = 'error';
-            message = `Errore in ${operation} su "${filename || itemPath}": ${error}`;
-        } else if (status === 'warning') {
-            toastType = 'warning';
-            message = `Attenzione in ${operation} su "${filename || itemPath}": ${error}`;
-        }
-        window.parent.showToast(message, toastType);
-    }
-
-    // Continua ad aggiungere alla cronologia messaggi per un log dettagliato
-    if (window.parent && window.parent.addMessageToHistory) {
-        window.parent.addMessageToHistory(`Filelist: Operazione ${operation} su ${itemPath} ${status}. ${error ? 'Errore: ' + error : ''}`, status);
-    } else {
-        console.warn('Filelist - window.parent.addMessageToHistory non disponibile.');
-    }
-
 }
 
 function notifyParentSpinner(action) {
@@ -184,12 +153,10 @@ function loadFilelist(storageName, dirPath) {
 
   updateCurrentPathDisplay();
 
-  // Invia il messaggio alla pagina padre per mostrare lo spinner specifico della lista file
-  notifyParentSpinner('show_loading_spinner');
+    notifyParentSpinner('show_loading_spinner');
 
   if (window.parent && window.parent.sendMessage) {
-    // Salva l'ID della richiesta quando viene inviata
-    lastListDirectoryRequestId = window.parent.sendMessage({ // Modificato: assegna l'ID
+    window.parent.sendMessage({
       type: 'list_directory',
       payload: {
         storage_name: storageName,
@@ -202,11 +169,9 @@ function loadFilelist(storageName, dirPath) {
     });
   } else {
     console.error('Filelist - window.parent.sendMessage non disponibile.');
-    // Nascondi lo spinner anche in caso di errore nell'invio del messaggio
-    notifyParentSpinner('hide_loading_spinner');
+         notifyParentSpinner('hide_loading_spinner');
   }
 }
-
 
 function updateCurrentPathDisplay() {
   const displayPath = currentDirPath === '' ? '/' : '/' + currentDirPath;
@@ -220,66 +185,54 @@ function resetPaginationAndLoadFiles() {
 
 function renderFileList(items) {
   filelistTableBody.innerHTML = '';
-  // Aggiungi l'elemento ".." per risalire alla directory superiore, se non è la radice dello storage corrente
   if (currentDirPath !== '') {
     const tr = document.createElement('tr');
     const nameTd = document.createElement('td');
     nameTd.textContent = '..';
     nameTd.style.fontWeight = 'bold';
     nameTd.style.cursor = 'pointer';
-    nameTd.colSpan = 5; // Occupa tutte le colonne
+    nameTd.colSpan = 5;
+
     nameTd.addEventListener('click', () => {
-      // Risali alla directory padre
       const parentPath = currentDirPath.substring(0, currentDirPath.lastIndexOf('/'));
-      currentPage = 1; // Resetta la paginazione
+      currentPage = 1;
       loadFilelist(currentStorageName, parentPath);
     });
     tr.appendChild(nameTd);
     filelistTableBody.appendChild(tr);
   }
 
-  // Itera sugli elementi e aggiungili alla tabella
   items.forEach(item => {
     const tr = document.createElement('tr');
 
-    // Colonna Nome
     const nameTd = document.createElement('td');
     nameTd.textContent = item.name;
     if (item.is_dir) {
-      // Se è una directory, rendi il nome cliccabile e in grassetto
       nameTd.style.fontWeight = 'bold';
       nameTd.style.cursor = 'pointer';
       nameTd.addEventListener('click', () => {
-        const newDirPath = item.path; // Il percorso dell'item è già completo dal backend
-        currentPage = 1; // Resetta la paginazione per la nuova directory
+        const newDirPath = item.path;
+        currentPage = 1;
         loadFilelist(currentStorageName, newDirPath);
       });
     }
     tr.appendChild(nameTd);
-
-    // Colonna Tipo
     const typeTd = document.createElement('td');
     typeTd.textContent = item.is_dir ? 'Directory' : 'File';
     tr.appendChild(typeTd);
 
-    // Colonna Dimensione
     const sizeTd = document.createElement('td');
-    sizeTd.textContent = item.is_dir ? '' : formatBytes(item.size); // La dimensione è solo per i file
+    sizeTd.textContent = item.is_dir ? '' : formatBytes(item.size);
     tr.appendChild(sizeTd);
-
-    // Colonna Modificato
     const modTimeTd = document.createElement('td');
     const modDate = new Date(item.mod_time);
-    modTimeTd.textContent = isNaN(modDate.getTime()) ? '' : modDate.toLocaleString(); // Formatta la data
+    modTimeTd.textContent = isNaN(modDate.getTime()) ? '' : modDate.toLocaleString();
     tr.appendChild(modTimeTd);
 
-    // Colonna Azioni
     const actionsTd = document.createElement('td');
-    actionsTd.classList.add('file-actions'); // Aggiungi una classe per lo stile dei pulsanti
+    actionsTd.classList.add('file-actions');
 
-    const itemFullPath = item.path; // Il percorso completo dell'item
-
-    // Pulsante Download (solo per i file)
+    const itemFullPath = item.path;
     if (!item.is_dir) {
       const downloadBtn = document.createElement('button');
       downloadBtn.textContent = 'Download';
@@ -287,49 +240,45 @@ function renderFileList(items) {
       actionsTd.appendChild(downloadBtn);
     }
 
-    // Pulsante Elimina (per entrambi i tipi)
     const deleteBtn = document.createElement('button');
     deleteBtn.textContent = 'Elimina';
-    deleteBtn.style.backgroundColor = '#f44336'; // Stile specifico per il pulsante Elimina
+    deleteBtn.style.backgroundColor = '#f44336';
     deleteBtn.style.color = 'white';
     deleteBtn.addEventListener('click', () => {
-        // Logica di conferma eliminazione
-        if (item.is_dir) {
-            // Se è una directory, prima di eliminare, controlla se ha contenuti
-            ongoingDeleteCheck = {
-                storageName: currentStorageName,
-                itemPath: itemFullPath,
-                itemName: item.name,
-                isDirectory: true
-            };
-            if (window.parent && window.parent.sendMessage) {
-                window.parent.sendMessage({
-                    type: 'check_directory_contents_request',
-                    payload: {
-                        storage_name: currentStorageName,
-                        dir_path: itemFullPath
-                    }
-                });
+            if (item.is_dir) {
+                ongoingDeleteCheck = {
+                    storageName: currentStorageName,
+                    itemPath: itemFullPath,
+                    itemName: item.name,
+                    isDirectory: true
+                };
+                if (window.parent && window.parent.sendMessage) {
+                    window.parent.sendMessage({
+                        type: 'check_directory_contents_request',
+                        payload: {
+                            storage_name: currentStorageName,
+                            dir_path: itemFullPath
+                        }
+                    });
+                }
+            } else {
+                if (window.parent && window.parent.postMessage) {
+                    window.parent.postMessage({
+                        type: 'show_delete_item_modal',
+                        payload: {
+                            storageName: currentStorageName,
+                            itemPath: itemFullPath,
+                            itemName: item.name,
+                            warningMessage: `Sei sicuro di voler eliminare "${item.name}"? Questa azione non può essere annullata.`
+                        }
+                    }, '*');
+                }
             }
-        } else {
-            // Se è un file, mostra direttamente la modale di conferma
-            if (window.parent && window.parent.postMessage) {
-                window.parent.postMessage({
-                    type: 'show_delete_item_modal',
-                    payload: {
-                        storageName: currentStorageName,
-                        itemPath: itemFullPath,
-                        itemName: item.name,
-                        warningMessage: `Sei sicuro di voler eliminare "${item.name}"? Questa azione non può essere annullata.`
-                    }
-                }, '*');
-            }
-        }
-    });
+        });
     actionsTd.appendChild(deleteBtn);
 
-    tr.appendChild(actionsTd); // Aggiungi le azioni alla riga
-    filelistTableBody.appendChild(tr); // Aggiungi la riga al corpo della tabella
+    tr.appendChild(actionsTd);
+    filelistTableBody.appendChild(tr);
   });
 }
 
@@ -337,6 +286,7 @@ function updatePaginationControls() {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   currentPageSpan.textContent = currentPage;
   totalPagesSpan.textContent = totalPages;
+
   prevPageBtn.disabled = currentPage <= 1;
   nextPageBtn.disabled = currentPage >= totalPages;
 }
@@ -406,6 +356,7 @@ function formatBytes(bytes, decimals = 2) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
@@ -413,7 +364,7 @@ function downloadFile(storageName, filePath) {
   console.log(`Richiesta download: ${storageName}/${filePath}`);
   const downloadUrl = `/download?storage=${encodeURIComponent(storageName)}&path=${encodeURIComponent(filePath)}`;
   window.open(downloadUrl, '_blank');
-  notifyFileOperationStatus('download', `${storageName}/${filePath}`, 'info', null, filePath.split('/').pop()); // Passa il nome del file per il toast
+    notifyFileOperationStatus('download', `${storageName}/${filePath}`, 'info');
 }
 
 async function uploadFile() {
@@ -424,7 +375,7 @@ async function uploadFile() {
     }
 
     if (currentStorageName === '' || currentDirPath === undefined || currentDirPath === null) {
-        alert('Seleziona una cartella di destinazione nel treeview.');
+        alert('Seleziona una cartella de destinazione nel treeview.');
         return;
     }
 
@@ -452,10 +403,14 @@ async function calculateSHA256(file) {
     }
 }
 
+// filelist.js (porzione di codice da aggiornare)
+
+
+
 async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
     if (currentStorageName === '' || currentDirPath === undefined || currentDirPath === null) {
         console.error(`Filelist - Destinazione upload non valida per ID ${uploadId}.`);
-        notifyUploadFailed(uploadId, file.name, 0, 'Destinazione upload non valida.', file.name);
+        notifyUploadFailed(uploadId, file.name, 0, 'Destinazione upload non valida.');
         return;
     }
 
@@ -465,7 +420,7 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
     notifyUploadProgress(uploadId, file.name, 0, 'Calcolo SHA256...', filePath);
     const clientSHA256 = await calculateSHA256(file);
     if (!clientSHA256) {
-        notifyUploadFailed(uploadId, file.name, 0, 'Fallito calcolo SHA256 lato client.', file.name);
+        notifyUploadFailed(uploadId, file.name, 0, 'Fallito calcolo SHA256 lato client.', filePath);
         return;
     }
     notifyUploadProgress(uploadId, file.name, 0, 'SHA256 calcolato. Preparazione...', filePath);
@@ -476,6 +431,7 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
         uploadPromiseResolve = resolve;
         uploadPromiseReject = reject;
     });
+
     ongoingUploads.set(uploadId, {
         file: file,
         uploadedSize: 0,
@@ -493,6 +449,7 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
         clientSHA256: clientSHA256,
         parallelChunks: parallelChunks
     });
+
     try {
         const initiateResponse = await fetch('/upload', {
             method: 'POST',
@@ -507,6 +464,7 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
                 chunk_size: chunkSize
             })
         });
+
         if (!initiateResponse.ok) {
             const errorText = await initiateResponse.text();
             throw new Error(`Errore nell'iniziare l'upload: ${initiateResponse.status} - ${errorText}`);
@@ -534,13 +492,15 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
             currentOffset += chunkSize;
             currentChunkIndex++;
         }
-        console.log(`Filelist - DEBUG: chunkQueue populated. Length: ${uploadState.chunkQueue.length}. First chunk index: ${uploadState.chunkQueue[0]?.index}`);
+        console.log(`Filelist - DEBUG: chunkQueue populated. Length: ${uploadState.chunkQueue.length}. First chunk index: ${uploadState.chunkQueue[0]?.index}`); // AGGIUNTO LOG
 
         console.log(`Filelist - Avvio invio chunk per ID ${uploadId}. Tentativo di inviare ${uploadState.parallelChunks} chunk in parallelo.`);
+
         for (let i = 0; i < uploadState.parallelChunks; i++) {
             try {
                 console.log(`Filelist - DEBUG: Schedulazione processNextChunk per ID ${uploadId} (loop ${i}).`);
                 setTimeout(() => {
+                    // NUOVO LOG: Verifica se il callback di setTimeout viene eseguito
                     console.log(`Filelist - DEBUG: Esecuzione callback setTimeout per processNextChunk per ID ${uploadId}.`);
                     const currentUploadState = ongoingUploads.get(uploadId);
                     if (!currentUploadState) {
@@ -554,12 +514,14 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
                 console.error(`Filelist - ERRORE DURANTE SCHEDULAZIONE processNextChunk per ID ${uploadId} (loop ${i}):`, e);
             }
         }
-        // await uploadPromise; // QUESTA RIGA È STATA TEMPORANEAMENTE COMMENTATA PER IL DEBUGGING
+
+        // await uploadPromise; // <--- QUESTA RIGA È STATA TEMPORANEAMENTE COMMENTATA PER IL DEBUGGING
+
     } catch (error) {
         console.error(`Errore critico durante l'upload ID ${uploadId} in startUploadProcess:`, error);
         const uploadState = ongoingUploads.get(uploadId);
         if (uploadState && uploadState.isUploading) {
-            notifyUploadFailed(uploadId, file.name, uploadState.uploadedSize, error.message, file.name);
+            notifyUploadFailed(uploadId, file.name, uploadState.uploadedSize, error.message, filePath);
             uploadState.isUploading = false;
             ongoingUploads.delete(uploadId);
             loadFilelist(currentStorageName, currentDirPath);
@@ -569,15 +531,15 @@ async function startUploadProcess(uploadId, file, chunkSize, parallelChunks) {
     }
 }
 
-
 async function processNextChunk(uploadId) {
     try {
-        console.log(`Filelist - DEBUG: processNextChunk invoked for upload ID: ${uploadId}. Active: ${ongoingUploads.get(uploadId)?.activeChunkUploads}, Queue: ${ongoingUploads.get(uploadId)?.chunkQueue.length}`);
         const uploadState = ongoingUploads.get(uploadId);
         if (!uploadState || !uploadState.isUploading) {
             console.log(`Filelist - Upload ID ${uploadId} annullato o stato non valido, non processa più chunk.`);
             return;
         }
+
+        console.log(`Filelist - DEBUG processNextChunk (ID: ${uploadId}): Inizio. Active: ${uploadState.activeChunkUploads}, Queue: ${uploadState.chunkQueue.length}, Parallel: ${uploadState.parallelChunks}`); // AGGIUNTO LOG
 
         // Se non ci sono chunk in coda E non ci sono chunk attivi, finalizza
         if (uploadState.chunkQueue.length === 0 && uploadState.activeChunkUploads === 0) {
@@ -589,7 +551,7 @@ async function processNextChunk(uploadId) {
         // Se ci sono troppi upload attivi o la coda è vuota, non fare nulla per ora.
         // Questa funzione verrà richiamata quando un chunk attivo si completa.
         if (uploadState.activeChunkUploads >= uploadState.parallelChunks || uploadState.chunkQueue.length === 0) {
-            console.log(`Filelist - DEBUG: processNextChunk waiting for active uploads to finish or queue to have more chunks. Active: ${uploadState.activeChunkUploads}, Parallel: ${uploadState.parallelChunks}, Queue: ${uploadState.chunkQueue.length}.`);
+            console.log(`Filelist - DEBUG processNextChunk (ID: ${uploadId}): Condizione di attesa soddisfatta. Active: ${uploadState.activeChunkUploads}, Queue: ${uploadState.chunkQueue.length}, Parallel: ${uploadState.parallelChunks}.`); // AGGIUNTO LOG
             return;
         }
 
@@ -600,9 +562,9 @@ async function processNextChunk(uploadId) {
         }
         
         console.log(`Filelist - DEBUG: Preparing to send chunk Index: ${nextChunkData.index} for upload ID: ${uploadId}`);
-        console.log(`Filelist - DEBUG: BEFORE activeChunkUploads increment: ${uploadState.activeChunkUploads}`);
+        console.log(`Filelist - DEBUG: BEFORE activeChunkUploads increment: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
         uploadState.activeChunkUploads++;
-        console.log(`Filelist - DEBUG: AFTER activeChunkUploads increment: ${uploadState.activeChunkUploads}`);
+        console.log(`Filelist - DEBUG: AFTER activeChunkUploads increment: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
 
         const { chunk, blockID, index: currentChunkIndex } = nextChunkData;
         const { file, expectedFileSize, storageName, filePath, chunkSize } = uploadState;
@@ -631,10 +593,10 @@ async function processNextChunk(uploadId) {
         }
 
         xhr.onload = () => {
-            console.log(`Filelist - DEBUG: XHR onload for chunk ${currentChunkIndex}, ID ${uploadId}. Status: ${xhr.status}`);
+            console.log(`Filelist - DEBUG: XHR onload for chunk ${currentChunkIndex}, ID ${uploadId}. Status: ${xhr.status}`); // AGGIUNTO LOG
             uploadState.activeXHRs.delete(xhr);
             uploadState.activeChunkUploads--;
-            console.log(`Filelist - DEBUG: AFTER XHR onload activeChunkUploads decrement: ${uploadState.activeChunkUploads}`);
+            console.log(`Filelist - DEBUG: AFTER XHR onload activeChunkUploads decrement: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
 
             if (xhr.status >= 200 && xhr.status < 300) {
                 if (uploadState.isUploading) {
@@ -658,10 +620,10 @@ async function processNextChunk(uploadId) {
         };
 
         xhr.onerror = () => {
-            console.log(`Filelist - DEBUG: XHR onerror for chunk ${currentChunkIndex}, ID ${uploadId}.`);
+            console.log(`Filelist - DEBUG: XHR onerror for chunk ${currentChunkIndex}, ID ${uploadId}.`); // AGGIUNTO LOG
             uploadState.activeXHRs.delete(xhr);
             uploadState.activeChunkUploads--;
-            console.log(`Filelist - DEBUG: AFTER XHR onerror activeChunkUploads decrement: ${uploadState.activeChunkUploads}`);
+            console.log(`Filelist - DEBUG: AFTER XHR onerror activeChunkUploads decrement: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
             console.error(`Filelist - Errore di rete durante il caricamento del chunk per ID ${uploadId} (Index: ${currentChunkIndex}, Size: ${formatBytes(chunk.size)}).`);
             if (uploadState.isUploading) {
                 uploadState.reject(new Error('Errore di rete durante il caricamento del chunk.'));
@@ -671,20 +633,20 @@ async function processNextChunk(uploadId) {
         };
 
         xhr.onabort = () => {
-            console.log(`Filelist - DEBUG: XHR onabort for chunk ${currentChunkIndex}, ID ${uploadId}.`);
+            console.log(`Filelist - DEBUG: XHR onabort for chunk ${currentChunkIndex}, ID ${uploadId}.`); // AGGIUNTO LOG
             uploadState.activeXHRs.delete(xhr);
             uploadState.activeChunkUploads--;
-            console.log(`Filelist - DEBUG: AFTER XHR onabort activeChunkUploads decrement: ${uploadState.activeChunkUploads}`);
+            console.log(`Filelist - DEBUG: AFTER XHR onabort activeChunkUploads decrement: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
             console.log(`Filelist - Upload chunk interrotto per ID ${uploadId} (Index: ${currentChunkIndex}).`);
             // Call processNextChunk to potentially send another chunk if a slot opened up
             processNextChunk(uploadId);
         };
 
         xhr.ontimeout = () => {
-            console.log(`Filelist - DEBUG: XHR ontimeout for chunk ${currentChunkIndex}, ID ${uploadId}.`);
+            console.log(`Filelist - DEBUG: XHR ontimeout for chunk ${currentChunkIndex}, ID ${uploadId}.`); // AGGIUNTO LOG
             uploadState.activeXHRs.delete(xhr);
             uploadState.activeChunkUploads--;
-            console.log(`Filelist - DEBUG: AFTER XHR ontimeout activeChunkUploads decrement: ${uploadState.activeChunkUploads}`);
+            console.log(`Filelist - DEBUG: AFTER XHR ontimeout activeChunkUploads decrement: ${uploadState.activeChunkUploads}`); // AGGIUNTO LOG
             console.error(`Filelist - Timeout durante il caricamento del chunk per ID ${uploadId} (Index: ${currentChunkIndex}, Size: ${formatBytes(chunk.size)}).`);
             if (uploadState.isUploading) {
                 uploadState.reject(new Error('Timeout durante il caricamento del chunk.'));
@@ -693,9 +655,9 @@ async function processNextChunk(uploadId) {
             processNextChunk(uploadId);
         };
 
-        console.log(`Filelist - DEBUG: Sending XHR for chunk ${currentChunkIndex}, ID ${uploadId}.`);
+        console.log(`Filelist - DEBUG: Sending XHR for chunk ${currentChunkIndex}, ID ${uploadId}.`); // AGGIUNTO LOG PRIMA DI SEND
         xhr.send(formData);
-        console.log(`Filelist - DEBUG: XHR sent for chunk ${currentChunkIndex}, ID ${uploadId}.`);
+        console.log(`Filelist - DEBUG: XHR sent for chunk ${currentChunkIndex}, ID ${uploadId}.`); // AGGIUNTO LOG DOPO SEND
     } catch (e) {
         console.error(`Filelist - ERRORE CRITICO in processNextChunk per upload ID ${uploadId}:`, e);
         const uploadState = ongoingUploads.get(uploadId);
@@ -706,6 +668,127 @@ async function processNextChunk(uploadId) {
 }
 
 
+
+async function processNextChunk(uploadId) {
+    try {
+        console.log(`Filelist - DEBUG: processNextChunk invoked for upload ID: ${uploadId}. Active: ${ongoingUploads.get(uploadId)?.activeChunkUploads}, Queue: ${ongoingUploads.get(uploadId)?.chunkQueue.length}`);
+        const uploadState = ongoingUploads.get(uploadId);
+        if (!uploadState || !uploadState.isUploading) {
+            console.log(`Filelist - Upload ID ${uploadId} annullato o stato non valido, non processa più chunk.`);
+            return;
+        }
+
+        // Se non ci sono chunk in coda E non ci sono chunk attivi, finalizza
+        if (uploadState.chunkQueue.length === 0 && uploadState.activeChunkUploads === 0) {
+            console.log(`Filelist - Tutti i chunk processati per ID ${uploadId}. Inizio finalizzazione.`);
+            finalizeUpload(uploadId);
+            return;
+        }
+
+        // Se ci sono troppi upload attivi o la coda è vuota, non fare nulla per ora.
+        // Questa funzione verrà richiamata quando un chunk attivo si completa.
+        if (uploadState.activeChunkUploads >= uploadState.parallelChunks || uploadState.chunkQueue.length === 0) {
+            console.log(`Filelist - DEBUG: processNextChunk waiting for active uploads to finish or queue to have more chunks. Active: ${uploadState.activeChunkUploads}, Parallel: ${uploadState.parallelChunks}, Queue: ${uploadState.chunkQueue.length}`);
+            return;
+        }
+
+        const nextChunkData = uploadState.chunkQueue.shift();
+        if (!nextChunkData) {
+            console.warn(`Filelist - nextChunkData is undefined for upload ID: ${uploadId}. Queue might be empty unexpectedly after shift.`);
+            return;
+        }
+        
+        console.log(`Filelist - DEBUG: Preparing to send chunk Index: ${nextChunkData.index} for upload ID: ${uploadId}`);
+        uploadState.activeChunkUploads++;
+        const { chunk, blockID, index: currentChunkIndex } = nextChunkData;
+        const { file, expectedFileSize, storageName, filePath, chunkSize } = uploadState;
+        const formData = new FormData();
+        formData.append('storage', storageName);
+        formData.append('path', filePath);
+        formData.append('action', 'chunk');
+        formData.append('block_id', blockID);
+        formData.append('chunk_index', currentChunkIndex);
+        formData.append('chunk_size', chunkSize);
+        formData.append('chunk', chunk);
+        const xhr = new XMLHttpRequest();
+        uploadState.activeXHRs.add(xhr);
+
+        xhr.open('POST', '/upload', true);
+        xhr.timeout = 600000;
+        if (xhr.upload) {
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const currentChunkProgress = event.loaded;
+                    const totalUploaded = uploadState.uploadedSize + currentChunkProgress;
+                    const percentage = (totalUploaded / expectedFileSize) * 100;
+                    notifyUploadProgress(uploadId, file.name, percentage, `Caricamento chunk ${currentChunkIndex + 1}...`, filePath);
+                }
+            };
+        }
+
+        xhr.onload = () => {
+            uploadState.activeXHRs.delete(xhr);
+            uploadState.activeChunkUploads--;
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (uploadState.isUploading) {
+                    uploadState.uploadedSize += chunk.size;
+                    uploadState.blockIDs.push(blockID);
+                    console.log(`Filelist - Chunk caricato per ID ${uploadId} (Index: ${currentChunkIndex}, Size: ${formatBytes(chunk.size)}). Dimensione totale caricata: ${formatBytes(uploadState.uploadedSize)}`);
+                    const percentage = (uploadState.uploadedSize / expectedFileSize) * 100;
+                    notifyUploadProgress(uploadId, file.name, percentage, `Chunk ${currentChunkIndex + 1} caricato.`, filePath);
+                }
+                // Call processNextChunk again to send the next chunk
+                processNextChunk(uploadId);
+            } else {
+                const errorText = xhr.responseText || `Status: ${xhr.status}`;
+                console.error(`Filelist - Errore nel caricare il chunk per ID ${uploadId} (Index: ${currentChunkIndex}): ${errorText}`);
+                if (uploadState.isUploading) {
+                    uploadState.reject(new Error(`Errore nel caricare il chunk: ${errorText}`));
+                }
+            }
+        };
+
+        xhr.onerror = () => {
+            uploadState.activeXHRs.delete(xhr);
+            uploadState.activeChunkUploads--;
+            console.error(`Filelist - Errore di rete durante il caricamento del chunk per ID ${uploadId} (Index: ${currentChunkIndex}, Size: ${formatBytes(chunk.size)}).`);
+            if (uploadState.isUploading) {
+                uploadState.reject(new Error('Errore di rete durante il caricamento del chunk.'));
+            }
+            // Call processNextChunk again to attempt to send the next chunk (or re-evaluate)
+            processNextChunk(uploadId);
+        };
+
+        xhr.onabort = () => {
+            uploadState.activeXHRs.delete(xhr);
+            uploadState.activeChunkUploads--;
+            console.log(`Filelist - Upload chunk interrotto per ID ${uploadId} (Index: ${currentChunkIndex}).`);
+            // Call processNextChunk to potentially send another chunk if a slot opened up
+            processNextChunk(uploadId);
+        };
+
+        xhr.ontimeout = () => {
+            uploadState.activeXHRs.delete(xhr);
+            uploadState.activeChunkUploads--;
+            console.error(`Filelist - Timeout durante il caricamento del chunk per ID ${uploadId} (Index: ${currentChunkIndex}, Size: ${formatBytes(chunk.size)}).`);
+            if (uploadState.isUploading) {
+                uploadState.reject(new Error('Timeout durante il caricamento del chunk.'));
+            }
+            // Call processNextChunk again as a slot is now free
+            processNextChunk(uploadId);
+        };
+
+        xhr.send(formData);
+        console.log(`Filelist - DEBUG: XHR request sent for upload ID: ${uploadId}, Chunk Index: ${currentChunkIndex}`);
+    } catch (e) {
+        console.error(`Filelist - ERRORE CRITICO in processNextChunk per upload ID ${uploadId}:`, e);
+        const uploadState = ongoingUploads.get(uploadId);
+        if (uploadState && uploadState.isUploading) {
+            uploadState.reject(new Error(`Errore interno durante l'elaborazione del chunk: ${e.message}`));
+        }
+    }
+}
+
 async function finalizeUpload(uploadId) {
     const uploadState = ongoingUploads.get(uploadId);
     if (!uploadState || !uploadState.isUploading) {
@@ -714,6 +797,7 @@ async function finalizeUpload(uploadId) {
     }
 
     const { file, expectedFileSize, storageName, filePath, clientSHA256 } = uploadState;
+
     if (uploadState.uploadedSize < file.size) {
         console.warn(`Filelist - Tentativo di finalizzare l'upload ID ${uploadId} ma non tutti i chunk sono stati caricati. uploadedSize: ${uploadState.uploadedSize}, file.size: ${file.size}`);
         if (uploadState.reject) {
@@ -740,7 +824,9 @@ async function finalizeUpload(uploadId) {
                 total_file_size: expectedFileSize
             })
         });
+
         console.log(`Filelist - Risposta finalizzazione ricevuta per ID ${uploadId}. Status:`, finalizeResponse.status);
+
         if (!finalizeResponse.ok) {
             const errorText = await finalizeResponse.text();
             console.error(`Filelist - Errore nel finalizzare l'upload per ID ${uploadId}: ${finalizeResponse.status} - ${errorText}`);
@@ -777,6 +863,7 @@ async function cancelUpload(uploadId) {
 
     console.log(`Filelist - Tentativo di annullare l'upload per ID ${uploadId} (${uploadState.file.name})`);
     uploadState.isUploading = false;
+
     uploadState.activeXHRs.forEach(xhr => {
         if (xhr.readyState !== XMLHttpRequest.UNSENT && xhr.readyState !== XMLHttpRequest.DONE) {
             console.log(`Filelist - Annullamento richiesta XHR attiva per ID ${uploadId}.`);
@@ -791,6 +878,7 @@ async function cancelUpload(uploadId) {
 
     ongoingUploads.delete(uploadId);
     loadFilelist(currentStorageName, currentDirPath);
+
     if (uploadState.reject) {
         uploadState.reject(new Error("Upload annullato dall'utente."));
     }
@@ -804,6 +892,7 @@ async function cancelUploadServer(uploadId) {
      }
 
      const { storageName, filePath } = uploadState;
+
      try {
          console.log(`Filelist - Invio richiesta cancel upload al server per ID ${uploadId}...`);
          const cancelResponse = await fetch('/upload', {
@@ -817,7 +906,9 @@ async function cancelUploadServer(uploadId) {
                  action: 'cancel'
              })
          });
+
          console.log(`Filelist - Risposta cancel ricevuta per ID ${uploadId}. Status:`, cancelResponse.status);
+
          if (!cancelResponse.ok) {
              const errorText = await cancelResponse.text();
              console.error(`Filelist - Erro nel cancellare l'upload lato server per ID ${uploadId}: ${cancelResponse.status} - ${errorText}`);
@@ -840,7 +931,7 @@ function createNewFolderConfirmed(storageName, dirPath, folderName) {
         dir_path: newDirPath
       }
     });
-    notifyFileOperationStatus('create_directory', `${storageName}/${newDirPath}`, 'info', null, folderName); // Passa il nome della cartella
+          notifyFileOperationStatus('create_directory', `${storageName}/${newDirPath}`, 'info');
   } else {
     console.error('Filelist - window.parent.sendMessage non disponibile per inviare create_directory.');
   }
@@ -856,7 +947,7 @@ function deleteItemConfirmed(storageName, itemPath, itemName) {
         item_path: itemPath
       }
     });
-    notifyFileOperationStatus('delete_item', `${storageName}/${itemPath}`, 'info', null, itemName); // Passa il nome dell'elemento
+         notifyFileOperationStatus('delete_item', `${storageName}/${itemPath}`, 'info');
   } else {
     console.error('Filelist - window.parent.sendMessage non disponibile per inviare delete_item.');
   }
@@ -877,7 +968,7 @@ function notifyUploadComplete(uploadId, fileName, filePath) {
             type: 'upload_complete',
             payload: { uploadId, fileName, filePath }
         }, '*');
-     }
+    }
 }
 
 function notifyUploadFailed(uploadId, fileName, uploadedSize, error, filePath) {
@@ -885,11 +976,12 @@ function notifyUploadFailed(uploadId, fileName, uploadedSize, error, filePath) {
         const uploadState = ongoingUploads.get(uploadId);
         const expectedFileSize = uploadState ? uploadState.expectedFileSize : 1;
         const percentage = (uploadedSize / expectedFileSize) * 100;
+
         window.parent.postMessage({
             type: 'upload_failed',
             payload: { uploadId, fileName, percentage, error, filePath }
         }, '*');
-     }
+    }
 }
 
 function notifyUploadCancelled(uploadId, fileName, uploadedSize, filePath) {
@@ -897,6 +989,7 @@ function notifyUploadCancelled(uploadId, fileName, uploadedSize, filePath) {
          const uploadState = ongoingUploads.get(uploadId);
          const expectedFileSize = uploadState ? uploadState.expectedFileSize : 1;
          const percentage = (uploadedSize / expectedFileSize) * 100;
+
          window.parent.postMessage({
              type: 'upload_cancelled',
              payload: { uploadId, fileName, percentage, filePath }
@@ -908,7 +1001,6 @@ function notifyUploadCancelled(uploadId, fileName, uploadedSize, filePath) {
 window.addEventListener('message', event => {
     if (event.data.type === 'load_filelist') {
         const payload = event.data.payload;
-        // Aggiunto controllo per assicurare che le variabili siano inizializzate, utile per caricamente iframe
         if (typeof currentStorageName !== 'undefined' && typeof currentDirPath !== 'undefined' && typeof currentPage !== 'undefined' && typeof itemsPerPage !== 'undefined' && typeof nameFilter !== 'undefined' && typeof timestampFilter !== 'undefined') {
              console.log('Filelist - Variables initialized, loading file list directly.');
              loadFilelist(payload.storageName, payload.dirPath);
@@ -916,8 +1008,8 @@ window.addEventListener('message', event => {
              console.warn('Filelist - Received load_filelist message before variables are fully initialized. Attempting delayed load.');
              setTimeout(() => {
                  if (typeof currentStorageName !== 'undefined' && typeof currentDirPath !== 'undefined' && typeof currentPage !== 'undefined' && typeof itemsPerPage !== 'undefined' && typeof nameFilter !== 'undefined' && typeof timestampFilter !== 'undefined') {
-                     console.log('Filelist - Variables initialized after delay, loading file list.');
-                     loadFilelist(payload.storageName, payload.dirPath);
+                      console.log('Filelist - Variables initialized after delay, loading file list.');
+                      loadFilelist(payload.storageName, payload.dirPath);
                  } else {
                       console.error('Filelist - Variables still undefined after delay. Cannot load file list.');
                  }
@@ -933,9 +1025,9 @@ window.addEventListener('message', event => {
         const chunkSize = payload.chunkSize;
         const parallelChunks = payload.parallelChunks;
         console.log(`Filelist - Received start_upload_process message from parent. Starting upload for ${files.length} files with chunk size ${chunkSize} and ${parallelChunks} parallel chunks.`);
+
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            // Genera un ID di upload unico per ciascun file
             const uploadId = Date.now() + '-' + i + '-' + file.name.replace(/[^a-zA-Z0-9]/g, '');
             startUploadProcess(uploadId, file, chunkSize, parallelChunks);
         }

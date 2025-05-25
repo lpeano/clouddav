@@ -52,10 +52,6 @@ func InitHandlers(cfg *config.Config, hub *websocket.Hub, mux *http.ServeMux) {
 	mux.Handle("/download", NoCacheMiddleware(AuthMiddleware(http.HandlerFunc(handleDownload)).(http.HandlerFunc)))
 	mux.Handle("/upload", NoCacheMiddleware(AuthMiddleware(http.HandlerFunc(handleUpload)).(http.HandlerFunc)))
 
-	// Handler per le pagine HTML degli iframe (possono essere richieste direttamente)
-	mux.HandleFunc("/treeview.html", NoCacheMiddleware(http.HandlerFunc(serveTreeviewHTML)))
-	mux.HandleFunc("/filelist.html", NoCacheMiddleware(http.HandlerFunc(serveFilelistHTML)))
-	
 	// Handler per il favicon.ico
 	mux.HandleFunc("/favicon.ico", NoCacheMiddleware(http.HandlerFunc(serveFavicon)))
 
@@ -83,16 +79,6 @@ func NoCacheMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // serveIndexHTML serve il file index.html.
 func serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "static/index.html")
-}
-
-// serveTreeviewHTML serve il file treeview.html.
-func serveTreeviewHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/treeview.html")
-}
-
-// serveFilelistHTML serve il file filelist.html.
-func serveFilelistHTML(w http.ResponseWriter, r *http.Request) {
-	http.ServeFile(w, r, "static/filelist.html")
 }
 
 // serveFavicon serve il file favicon.ico.
