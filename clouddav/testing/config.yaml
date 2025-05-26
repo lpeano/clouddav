@@ -64,7 +64,7 @@ timeouts:
   read_timeout: "500s"  # Timeout for reading the entire request body
   write_timeout: "1000s" # Timeout for writing the entire response (0s means no timeout, recommended for large downloads)
   idle_timeout: "120s" # Timeout for keep-alive connections
-client_ping_interval_ms: 2000
+client_ping_interval_ms: 3000
 # Livello di logging (DEBUG o INFO)
 # DEBUG: Include log dettagliati per debugging.
 # INFO: Include solo log informativi generali.
