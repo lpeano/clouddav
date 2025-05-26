@@ -720,7 +720,15 @@ func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *aut
 			}
 			return response, fmt.Errorf("error listing items from storage '%s' (User: %s, ReqID: %s): %w", payload.StorageName, userIdentifier, msg.RequestID, err)
 		}
-		response.Payload = listResponse
+		response.Payload = struct {
+			*storage.ListItemsResponse
+			StorageName string `json:"storage_name"`
+			DirPath     string `json:"dir_path"`
+		}{
+			ListItemsResponse: listResponse,
+			StorageName:       payload.StorageName, // payload è la variabile che contiene i dati della richiesta
+			DirPath:           payload.DirPath,     // payload è la variabile che contiene i dati della richiesta
+		}
 		if config.IsLogLevel(config.LogLevelDebug) {
 			log.Printf("list_directory_response (User: %s, ReqID: %s): Listed %d items for %s/%s", userIdentifier, msg.RequestID, len(listResponse.Items), payload.StorageName, payload.DirPath)
 		}
