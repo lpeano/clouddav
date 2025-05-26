@@ -322,7 +322,7 @@
             const filePath = currentFilelistDirPath === '' ? file.name : `${currentFilelistDirPath}/${file.name}`;
             
             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Inizio calcolo SHA256...', filePath);
-            const clientSHA256 = await calculateSHA256ForFile(file);
+                const clientSHA256 = await calculateSHA256ForFile(file);
             if (!clientSHA256) {
                 if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Errore calcolo SHA256.', filePath, true, 'failed');
                 continue;

@@ -38,28 +38,27 @@
         let pathKeyForThisResponse = null;
         let responseStorageName = null;
         let responseDirPath = null;
-        let targetElementForErrorCleanup = null; // Elemento da pulire in caso di errore generico
+        let targetElementForErrorCleanup = null;
 
         if (type === 'list_directory_response') {
             if (payload && typeof payload.storage_name === 'string' && typeof payload.dir_path === 'string') {
                 responseStorageName = payload.storage_name;
-                responseDirPath = payload.dir_path;
+                responseDirPath = payload.dir_path; // Può essere stringa vuota per la root
                 pathKeyForThisResponse = `${responseStorageName}:${responseDirPath}`;
             } else {
                 console.error(`TreeviewCtrl - list_directory_response (ID: ${messageRequestId}) MISSING storage_name or dir_path in payload. Payload received:`, JSON.stringify(payload));
-                // Tentativo di fallback: trovare il pathKey cercando l'ID nella mappa, sebbene meno affidabile.
                 lastRequestIds.forEach((reqId, pk) => {
                     if (reqId === messageRequestId) {
                         pathKeyForThisResponse = pk;
                         const parts = pk.split(':');
                         responseStorageName = parts[0];
-                        responseDirPath = parts.slice(1).join(':'); // Gestisce i due punti nel percorso, anche se improbabile per dirPath
+                        responseDirPath = parts.slice(1).join(':');
                         console.warn(`TreeviewCtrl - Fallback: Found pathKey "${pathKeyForThisResponse}" for ID ${messageRequestId} by searching map.`);
                     }
                 });
                 if (!pathKeyForThisResponse) {
                     notifyAppLogic(`Risposta directory (ID: ${messageRequestId}) ricevuta senza informazioni di percorso sufficienti. Impossibile elaborare.`, 'error');
-                    return; // Non possiamo procedere in modo affidabile
+                    return;
                 }
             }
         } else if (type === 'error') {
@@ -73,8 +72,7 @@
             });
             if (!pathKeyForThisResponse) {
                 console.warn(`TreeviewCtrl - Error message (ID: ${messageRequestId}) received, but no pending request found for this ID in lastRequestIds. Error:`, payload ? payload.error : "Unknown error");
-                // Se un elemento DOM è ancora taggato con questo ID orfano, puliscilo.
-                const orphanedElement = document.querySelector(`li[data-pending-request-id="${messageRequestId}"]`); // Vecchio attributo, per pulizia
+                const orphanedElement = document.querySelector(`li[data-pending-request-id="${messageRequestId}"]`);
                 if (orphanedElement) orphanedElement.removeAttribute('data-pending-request-id');
                 return;
             }
@@ -86,7 +84,6 @@
         const latestExpectedRequestIdForPath = lastRequestIds.get(pathKeyForThisResponse);
 
         if (latestExpectedRequestIdForPath !== messageRequestId) {
-            // Questo log è quello che vedi: "path: undefined:undefined" se pathKeyForThisResponse non è stato derivato correttamente.
             console.warn(`TreeviewCtrl - Response for ID ${messageRequestId} (path: ${pathKeyForThisResponse}) is NOT the latest expected ID (${latestExpectedRequestIdForPath || 'none'}) for this path. Ignoring as obsolete.`);
             return;
         }
@@ -98,7 +95,7 @@
             lastRequestIds.delete(pathKeyForThisResponse);
             return;
         }
-        targetElementForErrorCleanup = targetElement; // Salva per la pulizia in caso di errore
+        targetElementForErrorCleanup = targetElement;
 
         if (type === 'list_directory_response') {
             if (payload && Array.isArray(payload.items)) {
@@ -111,7 +108,7 @@
                 const ul = targetElement.querySelector('ul');
                 if (ul) ul.innerHTML = '';
             }
-        } else if (type === 'error') { // Errore specifico per questa richiesta/percorso
+        } else if (type === 'error') {
             console.error(`TreeviewCtrl - Error from backend for path ${pathKeyForThisResponse} (Req ID: ${messageRequestId}):`, payload.error);
             notifyAppLogic(`Errore caricamento directory ${pathKeyForThisResponse}: ${payload.error}`, 'error');
             if (targetElementForErrorCleanup) {
@@ -121,7 +118,7 @@
             }
         }
 
-        lastRequestIds.delete(pathKeyForThisResponse); // Richiesta gestita (successo o errore specifico)
+        lastRequestIds.delete(pathKeyForThisResponse);
     };
 
     window.requestInitialTreeviewData = () => {
@@ -173,12 +170,15 @@
         const storageName = clickedElement.dataset.storageName;
         const itemPath = clickedElement.dataset.path;
         const storageType = clickedElement.dataset.storageType;
+        const isDirectory = clickedElement.classList.contains('directory'); // Controlla se è una directory
 
+        // Notifica sempre la selezione, sia per file che per directory
         if (window.handleTreeviewSelect) {
             window.handleTreeviewSelect(storageName, itemPath, storageType);
         }
 
-        if (clickedElement.classList.contains('directory')) {
+        // Espandi/comprimi solo se è una directory
+        if (isDirectory) {
             if (event.target === clickedElement || clickedElement.contains(event.target)) {
                  toggleDirectory(clickedElement);
             }
@@ -254,22 +254,29 @@
 
         items.sort((a, b) => {
             if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
-            return a.is_dir ? -1 : 1;
+            return a.is_dir ? -1 : 1; // Directory prima dei file
         });
 
         items.forEach(item => {
-            if (!item.is_dir) return;
+            // *** MODIFICA CHIAVE: Rimossa la condizione if (!item.is_dir) return; ***
+            // Ora processiamo sia file che directory
 
             const li = document.createElement('li');
             li.textContent = item.name;
             li.dataset.storageName = storageName;
             li.dataset.path = item.path;
             li.dataset.storageType = storageType;
-            li.classList.add('directory');
-
-            const childUl = document.createElement('ul');
-            li.appendChild(childUl);
+            
             li.addEventListener('click', handleTreeviewItemClick);
+
+            if (item.is_dir) {
+                li.classList.add('directory');
+                const childUl = document.createElement('ul'); // Aggiungi ul solo per le directory
+                li.appendChild(childUl);
+            } else {
+                li.classList.add('file'); // Aggiungi classe 'file' per lo styling (es. icona)
+                // I file non hanno un 'ul' figlio e non si espandono/comprimono
+            }
             ul.appendChild(li);
         });
     }

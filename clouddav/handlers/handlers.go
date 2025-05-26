@@ -557,8 +557,10 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		log.Printf("Setting Mutex")
 		// Store the upload session state in the Hub's map
 		wsHub.FileUploadsMutex.Lock()
+		log.Printf("Mutex locked")
 		wsHub.OngoingFileUploads[uploadKey] = &websocket.UploadSessionState{
 			Claims:       claims, // Store claims for cleanup authorization
 			StorageName:  storageName,
@@ -567,6 +569,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 			ProviderType: provider.Type(),
 		}
 		wsHub.FileUploadsMutex.Unlock()
+		log.Printf("Store Setted Mutex unlock")
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]int64{"uploaded_size": uploadedSize})
