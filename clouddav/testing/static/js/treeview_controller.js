@@ -53,7 +53,7 @@
                         const parts = pk.split(':');
                         responseStorageName = parts[0];
                         responseDirPath = parts.slice(1).join(':');
-                        console.warn(`TreeviewCtrl - Fallback: Found pathKey "${pathKeyForThisResponse}" for ID ${messageRequestId} by searching map.`);
+                        console.warn(`TreeviewCtrl - Fallback: Found pathKey \"${pathKeyForThisResponse}\" for ID ${messageRequestId} by searching map.`);
                     }
                 });
                 if (!pathKeyForThisResponse) {
@@ -72,7 +72,7 @@
             });
             if (!pathKeyForThisResponse) {
                 console.warn(`TreeviewCtrl - Error message (ID: ${messageRequestId}) received, but no pending request found for this ID in lastRequestIds. Error:`, payload ? payload.error : "Unknown error");
-                const orphanedElement = document.querySelector(`li[data-pending-request-id="${messageRequestId}"]`);
+                const orphanedElement = document.querySelector(`li[data-pending-request-id=\"${messageRequestId}\"]`);
                 if (orphanedElement) orphanedElement.removeAttribute('data-pending-request-id');
                 return;
             }
@@ -88,7 +88,7 @@
             return;
         }
 
-        const targetElement = document.querySelector(`li[data-storage-name="${responseStorageName}"][data-path="${responseDirPath}"]`);
+        const targetElement = document.querySelector(`li[data-storage-name=\"${responseStorageName}\"][data-path=\"${responseDirPath}\"]`);
 
         if (!targetElement) {
             console.warn(`TreeviewCtrl - Target DOM element for path ${pathKeyForThisResponse} not found, though response ID ${messageRequestId} was expected. Tree might have been re-rendered. Cleaning up request ID from map.`);
@@ -100,7 +100,7 @@
         if (type === 'list_directory_response') {
             if (payload && Array.isArray(payload.items)) {
                 renderDirectoryContent(targetElement, payload.items);
-                notifyAppLogic(`Contenuto directory "${responseDirPath || responseStorageName || '/'}" caricato.`);
+                notifyAppLogic(`Contenuto directory \"${responseDirPath || responseStorageName || '/'}\" caricato.`);
             } else {
                 console.error('TreeviewCtrl - Invalid list_directory_response payload items (after pathKey check):', payload);
                 notifyAppLogic('Errore nel caricare contenuto directory: dati non validi.', 'error');
@@ -196,6 +196,8 @@
 
         if (isOpen) {
             directoryElement.classList.remove('open');
+            // Non è necessario pulire ul.innerHTML qui,
+            // perché le regole CSS si occuperanno di nascondere l'ul.
             return;
         }
 
@@ -219,17 +221,20 @@
                 return;
             }
 
-            notifyAppLogic(`Richiesta contenuto directory per "${itemPath || storageName || '/'}"...`);
+            notifyAppLogic(`Richiesta contenuto directory per \"${itemPath || storageName || '/'}\"...`);
             if (window.sendMessage) {
                 const requestID = window.sendMessage({
                     type: 'list_directory',
                     payload: {
                         storage_name: storageName,
                         dir_path: itemPath,
-                        page: 1,
-                        items_per_page: 1000,
-                        name_filter: '',
-                        timestamp_filter: ''
+                        page: 1, // Per il treeview, probabilmente vorrai sempre la prima pagina
+                        items_per_page: 1000, // Un numero grande per ottenere tutte le sottodirectory
+                                          // Se il backend ora pagina correttamente solo le directory,
+                                          // questo potrebbe essere rivisto.
+                        name_filter: '',       // Solitamente non si filtra per nome nel treeview
+                        timestamp_filter: '',  // Solitamente non si filtra per data nel treeview
+                        only_directories: true // << MODIFICA: Richiedi solo directory
                     }
                 });
                 lastRequestIds.set(pathKey, requestID);
@@ -252,31 +257,28 @@
         const storageName = directoryElement.dataset.storageName;
         const storageType = directoryElement.dataset.storageType;
 
-        items.sort((a, b) => {
-            if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
-            return a.is_dir ? -1 : 1; // Directory prima dei file
-        });
+        // Ordina solo per nome, dato che tutti gli items dovrebbero essere directory
+        items.sort((a, b) => a.name.localeCompare(b.name));
 
         items.forEach(item => {
-            // *** MODIFICA CHIAVE: Rimossa la condizione if (!item.is_dir) return; ***
-            // Ora processiamo sia file che directory
+            // Se il backend invia solo directory, item.is_dir dovrebbe essere sempre true.
+            // Aggiungiamo un controllo per sicurezza o se il backend potesse inviare misto in altri scenari.
+            if (!item.is_dir) { // Non dovrebbe accadere se only_directories:true funziona
+                console.warn(`TreeviewCtrl: Ricevuto un file (${item.name}) quando ci si aspettavano solo directory.`);
+                return;
+            }
 
             const li = document.createElement('li');
             li.textContent = item.name;
             li.dataset.storageName = storageName;
             li.dataset.path = item.path;
-            li.dataset.storageType = storageType;
+            li.dataset.storageType = storageType; // Potrebbe non essere più necessario se solo dir
+            
+            li.classList.add('directory'); // Tutti gli item sono directory
+            const childUl = document.createElement('ul');
+            li.appendChild(childUl);
             
             li.addEventListener('click', handleTreeviewItemClick);
-
-            if (item.is_dir) {
-                li.classList.add('directory');
-                const childUl = document.createElement('ul'); // Aggiungi ul solo per le directory
-                li.appendChild(childUl);
-            } else {
-                li.classList.add('file'); // Aggiungi classe 'file' per lo styling (es. icona)
-                // I file non hanno un 'ul' figlio e non si espandono/comprimono
-            }
             ul.appendChild(li);
         });
     }
@@ -285,7 +287,12 @@
         if (!treeviewRoot) return;
         notifyAppLogic('Espansione di tutti i nodi del treeview...');
         treeviewRoot.querySelectorAll('li.directory:not(.open)').forEach(dirEl => {
-            dirEl.click();
+            // Simula un click per espandere e caricare il contenuto se necessario
+            // Assicurati che il click non causi problemi se chiamato in rapida successione
+            // o se l'elemento non è completamente inizializzato.
+            // Una chiamata diretta a toggleDirectory potrebbe essere più sicura in alcuni casi,
+            // ma il click simula più da vicino l'interazione utente.
+            dirEl.click(); 
         });
     };
 
@@ -294,6 +301,8 @@
         notifyAppLogic('Compressione di tutti i nodi del treeview...');
         treeviewRoot.querySelectorAll('li.directory.open').forEach(dirEl => {
             dirEl.classList.remove('open');
+            // Non è necessario pulire ul.innerHTML qui,
+            // perché le regole CSS si occuperanno di nascondere l'ul.
         });
     };
     console.log('treeview_controller.js loaded');

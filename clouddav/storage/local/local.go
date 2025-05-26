@@ -82,13 +82,14 @@ func (p *LocalFilesystemProvider) validatePath(requestedPath string) (string, er
 
 // ListItems lists the contents of a specified directory, applying pagination and filters.
 // The path is relative to the configured storage root. Includes claims parameter for logging.
-func (p *LocalFilesystemProvider) ListItems(ctx context.Context, claims *auth.UserClaims, path string, page int, itemsPerPage int, nameFilter string, timestampFilter *time.Time) (*storage.ListItemsResponse, error) {
+// << MODIFICA: Aggiunto il parametro onlyDirectories
+func (p *LocalFilesystemProvider) ListItems(ctx context.Context, claims *auth.UserClaims, path string, page int, itemsPerPage int, nameFilter string, timestampFilter *time.Time, onlyDirectories bool) (*storage.ListItemsResponse, error) {
 	userIdent := "unauthenticated"
 	if claims != nil {
 		userIdent = claims.Email
 	}
 	if config.IsLogLevel(config.LogLevelInfo) {
-		log.Printf("LocalFilesystemProvider.ListItems chiamato da utente '%s' per storage '%s', path '%s', page %d, itemsPerPage %d, nameFilter '%s'", userIdent, p.name, path, page, itemsPerPage, nameFilter)
+		log.Printf("LocalFilesystemProvider.ListItems chiamato da utente '%s' per storage '%s', path '%s', page %d, itemsPerPage %d, nameFilter '%s', onlyDirectories: %t", userIdent, p.name, path, page, itemsPerPage, nameFilter, onlyDirectories)
 	}
 
 	fullPath, err := p.validatePath(path)
@@ -132,6 +133,11 @@ func (p *LocalFilesystemProvider) ListItems(ctx context.Context, claims *auth.Us
 			continue
 		}
 
+		// << MODIFICA: Salta i file se onlyDirectories è true
+		if onlyDirectories && !item.IsDir() {
+			continue
+		}
+
 		itemInfo := storage.ItemInfo{
 			Name:    item.Name(),
 			IsDir:   item.IsDir(),
@@ -157,11 +163,10 @@ func (p *LocalFilesystemProvider) ListItems(ctx context.Context, claims *auth.Us
 	}
 
 	if config.IsLogLevel(config.LogLevelDebug) {
-		log.Printf("LocalFilesystemProvider.ListItems: Found %d items after filtering", len(filteredItems))
+		log.Printf("LocalFilesystemProvider.ListItems: Found %d items after filtering (onlyDirectories: %t)", len(filteredItems), onlyDirectories)
 	}
 
 	sort.SliceStable(filteredItems, func(i, j int) bool {
-		// Corretto: utilizzare filteredItems invece di filteredFiles
 		if filteredItems[i].IsDir != filteredItems[j].IsDir {
 			return filteredItems[i].IsDir
 		}

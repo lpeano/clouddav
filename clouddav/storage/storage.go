@@ -38,7 +38,8 @@ type StorageProvider interface {
 	Type() string
 	Name() string
 
-	ListItems(ctx context.Context, claims *auth.UserClaims, path string, page int, itemsPerPage int, nameFilter string, timestampFilter *time.Time) (*ListItemsResponse, error)
+	// << MODIFICA: Aggiunto il parametro onlyDirectories
+	ListItems(ctx context.Context, claims *auth.UserClaims, path string, page int, itemsPerPage int, nameFilter string, timestampFilter *time.Time, onlyDirectories bool) (*ListItemsResponse, error)
 	GetItem(ctx context.Context, claims *auth.UserClaims, path string) (*ItemInfo, error)
 	OpenReader(ctx context.Context, claims *auth.UserClaims, path string) (io.ReadCloser, error)
 	CreateDirectory(ctx context.Context, claims *auth.UserClaims, path string) error
