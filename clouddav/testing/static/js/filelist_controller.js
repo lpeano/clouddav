@@ -322,7 +322,7 @@
             const filePath = currentFilelistDirPath === '' ? file.name : `${currentFilelistDirPath}/${file.name}`;
             
             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Inizio calcolo SHA256...', filePath);
-                const clientSHA256 = await calculateSHA256ForFile(file);
+            const clientSHA256 = await calculateSHA256ForFile(file);
             if (!clientSHA256) {
                 if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Errore calcolo SHA256.', filePath, true, 'failed');
                 continue;
@@ -502,6 +502,12 @@
         }
 
         if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, 100, 'Finalizzazione e verifica...', uploadState.filePath);
+        // --- INIZIO MODIFICA CLIENT (Ordinamento blockID) ---
+        uploadState.blockIDs.sort();
+        if (console && console.debug) { 
+            console.debug(`FilelistCtrl - Block IDs ordinati per ${uploadState.file.name}:`, JSON.stringify(uploadState.blockIDs)); // Aggiunto JSON.stringify per una migliore visualizzazione
+        }
+        // --- FINE MODIFICA CLIENT ---
         try {
             const finalizeResponse = await fetch('/upload', {
                 method: 'POST',

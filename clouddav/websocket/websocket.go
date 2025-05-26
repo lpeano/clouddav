@@ -44,7 +44,7 @@ type Client struct {
 	ctx            context.Context   // Contesto del client, derivato dal Hub
 	cancel         context.CancelFunc// Funzione per cancellare il contesto del client
 	userIdentifier string            // Identificatore univoco per il client (email o ID generato)
-	hub            *Hub              // <<< MODIFICA: Riferimento all'Hub
+	hub            *Hub              
 }
 
 // UploadSessionState tracks the state of an ongoing file upload.
@@ -412,12 +412,12 @@ func (h *Hub) ServeWs(w http.ResponseWriter, r *http.Request, claims *auth.UserC
 		cancel:         clientCancel,
 		userIdentifier: userIdent,
 		lastActivity:   time.Now(),
-		hub:            h, // <<< MODIFICA: Passa il riferimento all'Hub
+		hub:            h, 
 	}
 	h.register <- client
 
 	go client.writePump()
-	go client.readPump() // <<< MODIFICA: readPump ora usa c.hub internamente
+	go client.readPump() 
 }
 
 // ServeLongPolling handles Long Polling requests after user authentication checks.
@@ -475,12 +475,12 @@ func (h *Hub) ServeLongPolling(w http.ResponseWriter, r *http.Request, claims *a
 }
 
 // readPump reads messages from the WebSocket client and processes them.
-func (c *Client) readPump() { // <<< MODIFICA: Rimosso h *Hub come parametro
+func (c *Client) readPump() { 
 	defer func() {
-		c.hub.unregister <- c // <<< MODIFICA: Usa c.hub
+		c.hub.unregister <- c 
 	}()
 
-	pongWait := time.Duration(c.hub.config.ClientPingIntervalMs*3) * time.Millisecond // <<< MODIFICA: Usa c.hub.config
+	pongWait := time.Duration(c.hub.config.ClientPingIntervalMs*3) * time.Millisecond 
 	if pongWait <= 0 {
 		pongWait = 60 * time.Second
 	}
@@ -534,7 +534,7 @@ func (c *Client) readPump() { // <<< MODIFICA: Rimosso h *Hub come parametro
 
 		go func(ctx context.Context, message Message) {
 			defer cancelMsgCtx()
-			response, processErr := c.hub.handleClientMessage(ctx, &message, c.claims) // <<< MODIFICA: Usa c.hub
+			response, processErr := c.hub.handleClientMessage(ctx, &message, c.claims) 
 			if processErr != nil {
 				log.Printf("Error processing message (User: %s, Type: %s, ReqID: %s): %v", c.userIdentifier, message.Type, message.RequestID, processErr)
 				response = Message{
@@ -564,7 +564,7 @@ func (c *Client) readPump() { // <<< MODIFICA: Rimosso h *Hub come parametro
 // writePump sends messages to the WebSocket client.
 func (c *Client) writePump() {
 	// Intervallo di ping inviato dal server al client WebSocket
-	pingPeriod := time.Duration(c.hub.config.ClientPingIntervalMs) * time.Millisecond // <<< MODIFICA: Usa c.hub.config
+	pingPeriod := time.Duration(c.hub.config.ClientPingIntervalMs) * time.Millisecond 
 	if pingPeriod <= 0 {
 		pingPeriod = 30 * time.Second // Fallback
 	}
@@ -622,10 +622,6 @@ func (c *Client) writePump() {
 }
 
 // handleClientMessage processes messages received from clients (WS or LP).
-// (La funzione handleClientMessage rimane sostanzialmente invariata rispetto alla versione precedente,
-// dato che il problema principale era nell'acquisizione del lock in handleUpload e nell'accesso
-// alla configurazione da writePump. Si assume che la logica interna di handleClientMessage sia corretta
-// per quanto riguarda l'elaborazione dei tipi di messaggio.)
 func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *auth.UserClaims) (Message, error) {
 	var response Message
 	response.Type = msg.Type + "_response"
@@ -669,6 +665,7 @@ func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *aut
 			ItemsPerPage    int    `json:"items_per_page"`
 			NameFilter      string `json:"name_filter"`
 			TimestampFilter string `json:"timestamp_filter"`
+			OnlyDirectories bool   `json:"only_directories,omitempty"` // << MODIFICA: Campo aggiunto
 		}
 		payloadBytes, err := json.Marshal(msg.Payload)
 		if err != nil {
@@ -711,7 +708,8 @@ func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *aut
 			}
 		}
 
-		listResponse, err := provider.ListItems(ctx, claims, payload.DirPath, page, itemsPerPage, payload.NameFilter, tFilter)
+		// << MODIFICA: Passa payload.OnlyDirectories al provider
+		listResponse, err := provider.ListItems(ctx, claims, payload.DirPath, page, itemsPerPage, payload.NameFilter, tFilter, payload.OnlyDirectories)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				response.Type = "error"
@@ -726,8 +724,8 @@ func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *aut
 			DirPath     string `json:"dir_path"`
 		}{
 			ListItemsResponse: listResponse,
-			StorageName:       payload.StorageName, // payload è la variabile che contiene i dati della richiesta
-			DirPath:           payload.DirPath,     // payload è la variabile che contiene i dati della richiesta
+			StorageName:       payload.StorageName, 
+			DirPath:           payload.DirPath,     
 		}
 		if config.IsLogLevel(config.LogLevelDebug) {
 			log.Printf("list_directory_response (User: %s, ReqID: %s): Listed %d items for %s/%s", userIdentifier, msg.RequestID, len(listResponse.Items), payload.StorageName, payload.DirPath)
@@ -915,7 +913,7 @@ func (h *Hub) handleClientMessage(ctx context.Context, msg *Message, claims *aut
 			return response, fmt.Errorf("storage provider '%s' not found", payload.StorageName)
 		}
 
-		listResponse, err := provider.ListItems(ctx, claims, payload.DirPath, 1, 1, "", nil)
+		listResponse, err := provider.ListItems(ctx, claims, payload.DirPath, 1, 1, "", nil, false) // onlyDirectories è false qui, perché vogliamo sapere se c'è *qualsiasi* contenuto
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				response.Payload = map[string]bool{"has_contents": false}
