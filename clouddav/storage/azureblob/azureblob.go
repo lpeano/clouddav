@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"path/filepath" // Importato per filepath.Base
+	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
+	"sort" // Assicurati che questo import sia presente
 	"strings"
 	"sync"
 	"time"
@@ -109,6 +109,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 		userIdent = claims.Email
 	}
 	if config.IsLogLevel(config.LogLevelInfo) {
+		// CORREZIONE: Rimosso \ prima di " finale
 		log.Printf("AzureBlobStorageProvider.ListItems chiamato da utente '%s' per storage '%s', path '%s', page %d, itemsPerPage %d, nameFilter '%s', onlyDirectories: %t", userIdent, p.name, path, page, itemsPerPage, nameFilter, onlyDirectories)
 	}
 
@@ -118,14 +119,15 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 	}
 
 	if config.IsLogLevel(config.LogLevelDebug) {
+		// CORREZIONE: Rimosso \ prima di " finale
 		log.Printf("Azure Blob: Listing items in container '%s' with prefix '%s' for storage '%s'", p.containerName, prefix, p.name)
 	}
 
-	azureMaxResults := int32(itemsPerPage * 2) // Richiedi un po' di più per permettere il filtraggio
+	azureMaxResults := int32(itemsPerPage * 2)
 	if azureMaxResults == 0 {
-		azureMaxResults = 100 // Un default ragionevole
+		azureMaxResults = 100
 	}
-	if onlyDirectories && azureMaxResults < 50 { // Se si richiedono solo directory, potrebbe essere necessario un buffer maggiore
+	if onlyDirectories && azureMaxResults < 50 {
 		azureMaxResults = 50
 	}
 
@@ -135,11 +137,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 	})
 
 	allFilteredItems := []storage.ItemInfo{}
-	// La variabile itemsCount non è più necessaria qui, la logica del loop sottostante è sufficiente.
 
-	// Loop per raccogliere abbastanza items per la pagina richiesta, considerando il filtraggio
-	// Questo loop esterno è per la paginazione logica dell'applicazione.
-	// Il loop interno h_pager.More() è per la paginazione dell'SDK Azure.
 	for len(allFilteredItems) < page*itemsPerPage && h_pager.More() {
 		pageResponse, err := h_pager.NextPage(ctx)
 		if err != nil {
@@ -166,7 +164,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 						Name:    name,
 						IsDir:   true,
 						Size:    0,
-						ModTime: time.Time{}, // No modification time for virtual directories
+						ModTime: time.Time{},
 						Path:    strings.TrimSuffix(*bp.Name, "/"),
 					}
 					if nameFilter != "" {
@@ -175,7 +173,6 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 							continue
 						}
 					}
-					// Il timestampFilter non si applica alle directory virtuali
 					allFilteredItems = append(allFilteredItems, itemInfo)
 				}
 			}
@@ -184,7 +181,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 				if pageResponse.Segment.BlobItems != nil {
 					for _, blobItem := range pageResponse.Segment.BlobItems {
 						name := strings.TrimPrefix(*blobItem.Name, prefix)
-						if strings.Contains(name, "/") { // Ignora gli item che sono in "sottocartelle" rispetto al prefix corrente
+						if strings.Contains(name, "/") {
 							continue
 						}
 
@@ -213,7 +210,6 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 		}
 	}
 
-	// Ora che abbiamo tutti gli item filtrati (potenzialmente da più pagine Azure), ordiniamoli
 	sort.SliceStable(allFilteredItems, func(i, j int) bool {
 		if allFilteredItems[i].IsDir != allFilteredItems[j].IsDir {
 			return allFilteredItems[i].IsDir
@@ -221,8 +217,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 		return allFilteredItems[i].Name < allFilteredItems[j].Name
 	})
 
-	// Applica la paginazione logica
-	totalItems := len(allFilteredItems) // << MODIFICA: Dichiarazione corretta con :=
+	totalItems := len(allFilteredItems)
 
 	startIndex := (page - 1) * itemsPerPage
 	endIndex := startIndex + itemsPerPage
@@ -242,6 +237,7 @@ func (p *AzureBlobStorageProvider) ListItems(ctx context.Context, claims *auth.U
 
 	paginatedItems := allFilteredItems[startIndex:endIndex]
 	if config.IsLogLevel(config.LogLevelDebug) {
+		// CORREZIONE: Rimosso \ prima di " finale
 		log.Printf("Azure Blob: Returning %d items for page %d (total filtered: %d, onlyDirs: %t)", len(paginatedItems), page, totalItems, onlyDirectories)
 	}
 
@@ -260,6 +256,7 @@ func (p *AzureBlobStorageProvider) GetItem(ctx context.Context, claims *auth.Use
 		userIdent = claims.Email
 	}
 	if config.IsLogLevel(config.LogLevelInfo) {
+		// CORREZIONE: Rimosso \ prima di " finale
 		log.Printf("AzureBlobStorageProvider.GetItem chiamato da utente '%s' per storage '%s', path '%s'", userIdent, p.name, path)
 	}
 
@@ -271,36 +268,34 @@ func (p *AzureBlobStorageProvider) GetItem(ctx context.Context, claims *auth.Use
 	if err != nil {
 		var storageErr *azcore.ResponseError
 		if errors.As(err, &storageErr) && storageErr.StatusCode == 404 {
-			// Potrebbe essere una directory virtuale, controlla se esistono blob con quel prefisso
 			prefixToCheck := blobPath
 			if prefixToCheck != "" && !strings.HasSuffix(prefixToCheck, "/") {
 				prefixToCheck += "/"
 			}
 			pager := p.containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
 				Prefix:     to.Ptr(prefixToCheck),
-				MaxResults: to.Ptr(int32(1)), // Basta uno per confermare l'esistenza
+				MaxResults: to.Ptr(int32(1)),
 			})
 
 			pageResponse, listErr := pager.NextPage(ctx)
 			if listErr == nil && pageResponse.Segment != nil &&
 				(len(pageResponse.Segment.BlobPrefixes) > 0 || len(pageResponse.Segment.BlobItems) > 0) {
-				// Esiste qualcosa sotto questo prefisso, consideralo una directory
 				return &storage.ItemInfo{
-					Name:    filepath.Base(path), // Nome base del percorso
+					Name:    filepath.Base(path),
 					IsDir:   true,
-					Size:    0, // Le directory virtuali non hanno dimensione
-					ModTime: time.Time{}, // Nessun ModTime per le directory virtuali
+					Size:    0,
+					ModTime: time.Time{},
 					Path:    path,
 				}, nil
 			}
-			return nil, storage.ErrNotFound // Nessun blob e nessun prefisso trovato
+			return nil, storage.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get blob properties for '%s': %w", blobPath, err)
 	}
 
 	itemInfo := &storage.ItemInfo{
-		Name:    filepath.Base(path), // Nome base del percorso
-		IsDir:   false, // Se GetProperties ha successo, è un blob (file)
+		Name:    filepath.Base(path),
+		IsDir:   false,
 		Size:    *props.ContentLength,
 		ModTime: *props.LastModified,
 		Path:    path,
@@ -316,15 +311,15 @@ func (p *AzureBlobStorageProvider) OpenReader(ctx context.Context, claims *auth.
 		userIdent = claims.Email
 	}
 	if config.IsLogLevel(config.LogLevelInfo) {
+		// CORREZIONE: Rimosso \ prima di " finale
 		log.Printf("AzureBlobStorageProvider.OpenReader chiamato da utente '%s' per storage '%s', path '%s'", userIdent, p.name, path)
 	}
 
 	blobPath := strings.TrimPrefix(path, "/")
 
-	// Verifica prima se è una directory virtuale, perché non può essere letta
-	itemInfo, err := p.GetItem(ctx, claims, path) // Riusa GetItem per la logica di directory virtuale
+	itemInfo, err := p.GetItem(ctx, claims, path)
 	if err != nil {
-		return nil, err // GetItem gestisce ErrNotFound e altri errori
+		return nil, err
 	}
 	if itemInfo.IsDir {
 		return nil, errors.New("cannot open a directory for reading")
@@ -358,15 +353,13 @@ func (p *AzureBlobStorageProvider) CreateDirectory(ctx context.Context, claims *
 		dirBlobPath += "/"
 	}
 
-	// Controlla se esiste già come blob o come prefisso con contenuto
 	itemInfo, err := p.GetItem(ctx, claims, strings.TrimSuffix(dirBlobPath, "/"))
-	if err == nil && itemInfo != nil { // Se GetItem ha successo, qualcosa esiste
+	if err == nil && itemInfo != nil {
 		return storage.ErrAlreadyExists
 	}
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return fmt.Errorf("failed to check for existing virtual directory '%s': %w", dirBlobPath, err)
 	}
-	// Se ErrNotFound, possiamo procedere a creare il marker
 
 	dirMarkerBlobClient := p.containerClient.NewBlockBlobClient(dirBlobPath)
 	uploadResp, err := dirMarkerBlobClient.UploadBuffer(ctx, []byte{}, nil)
@@ -397,7 +390,6 @@ func (p *AzureBlobStorageProvider) DeleteItem(ctx context.Context, claims *auth.
 
 	blobPath := strings.TrimPrefix(path, "/")
 
-	// Determina se è un file o una directory (virtuale)
 	itemInfo, err := p.GetItem(ctx, claims, path)
 	if errors.Is(err, storage.ErrNotFound) {
 		return storage.ErrNotFound
@@ -406,7 +398,7 @@ func (p *AzureBlobStorageProvider) DeleteItem(ctx context.Context, claims *auth.
 		return fmt.Errorf("failed to get item properties before deleting '%s': %w", blobPath, err)
 	}
 
-	if !itemInfo.IsDir { // È un singolo blob (file)
+	if !itemInfo.IsDir {
 		if config.IsLogLevel(config.LogLevelInfo) {
 			log.Printf("Azure Blob: Deleting blob '%s' in container '%s'", blobPath, p.containerName)
 		}
@@ -425,7 +417,6 @@ func (p *AzureBlobStorageProvider) DeleteItem(ctx context.Context, claims *auth.
 		return nil
 	}
 
-	// È una directory virtuale, elimina tutti i blob con quel prefisso
 	prefix := blobPath
 	if prefix != "" && !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
@@ -459,12 +450,11 @@ func (p *AzureBlobStorageProvider) DeleteItem(ctx context.Context, claims *auth.
 		}
 	}
 
-	// Aggiungi il marker della directory stessa se esiste (es. path/ a zero byte)
 	dirMarkerPath := prefix
-	if len(blobsToDelete) == 0 { // Se non ci sono blob sotto il prefisso, potrebbe esistere solo il marker
+	if len(blobsToDelete) == 0 {
 		markerClient := p.containerClient.NewBlobClient(dirMarkerPath)
 		_, markerErr := markerClient.GetProperties(ctx, nil)
-		if markerErr == nil { // Il marker esiste
+		if markerErr == nil {
 			blobsToDelete = append(blobsToDelete, dirMarkerPath)
 		} else {
 			var markerStorageErr *azcore.ResponseError
@@ -475,7 +465,7 @@ func (p *AzureBlobStorageProvider) DeleteItem(ctx context.Context, claims *auth.
 	}
 
 	if len(blobsToDelete) == 0 {
-		return storage.ErrNotFound // Nessun blob o marker trovato da eliminare
+		return storage.ErrNotFound
 	}
 
 	var wg sync.WaitGroup
@@ -552,19 +542,19 @@ func (p *AzureBlobStorageProvider) InitiateUpload(ctx context.Context, claims *a
 	itemInfo, err := p.GetItem(ctx, claims, blobPath)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			return 0, nil 
+			return 0, nil
 		}
 		return 0, fmt.Errorf("failed to check existing blob for upload '%s': %w", blobPath, err)
 	}
 
-	if itemInfo.IsDir { 
+	if itemInfo.IsDir {
 		return 0, errors.New("cannot upload to a virtual directory path")
 	}
-	
+
 	if config.IsLogLevel(config.LogLevelDebug) {
 		log.Printf("AzureBlob.InitiateUpload: Blob '%s' exists with size %d. Client should handle resume logic.", blobPath, itemInfo.Size)
 	}
-	return 0, nil 
+	return 0, nil
 }
 
 // WriteChunk uploads a block to a block blob.
@@ -609,6 +599,19 @@ func (p *AzureBlobStorageProvider) FinalizeUpload(ctx context.Context, claims *a
 	blobPath = strings.TrimPrefix(blobPath, "/")
 
 	blockBlobClient := p.containerClient.NewBlockBlobClient(blobPath)
+
+	// --- INIZIO MODIFICA ---
+	// Ordina i blockID lessicograficamente.
+	// Dato che i blockID sono generati dal client come btoa(String(chunkIndex).padStart(20, '0')),
+	// l'ordinamento lessicografico corrisponderà all'ordine sequenziale corretto dei chunk.
+	if config.IsLogLevel(config.LogLevelDebug) {
+		log.Printf("Azure Blob: Block IDs prima dell'ordinamento per '%s': %v", blobPath, blockIDs)
+	}
+	sort.Strings(blockIDs) // Questa è la riga chiave da aggiungere
+	if config.IsLogLevel(config.LogLevelDebug) {
+		log.Printf("Azure Blob: Block IDs dopo l'ordinamento per '%s': %v", blobPath, blockIDs)
+	}
+	// --- FINE MODIFICA ---
 
 	_, err := blockBlobClient.CommitBlockList(ctx, blockIDs, nil)
 	if err != nil {
@@ -706,7 +709,7 @@ func (p *AzureBlobStorageProvider) GetUploadedSize(ctx context.Context, claims *
 	itemInfo, err := p.GetItem(ctx, claims, blobPath)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			return 0, nil 
+			return 0, nil
 		}
 		return 0, fmt.Errorf("failed to get blob size for upload status '%s': %w", blobPath, err)
 	}
