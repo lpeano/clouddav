@@ -112,6 +112,13 @@
             content: '📁 ';
             margin-right: 5px;
         }
+
+        #treeview-root li.directory > ul {
+            display: none; /* Nasconde i figli delle directory per default */
+        }
+        #treeview-root li.directory.open > ul {
+            display: block; /* Mostra i figli quando la directory ha la classe .open */
+        }
         #treeview-root li.directory.open::before {
             content: '📂 ';
         }
