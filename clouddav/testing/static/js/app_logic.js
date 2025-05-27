@@ -1,8 +1,8 @@
 // static/js/app_logic.js
 // Main application logic, UI interactions, and coordination
+console.log('--- EXECUTING app_logic.js ---'); // NUOVO LOG INIZIALE
 
-// --- Global State ---
-let currentSelectedStorageName = '';
+// --- Global State ---\nlet currentSelectedStorageName = '';
 let currentSelectedDirPath = '';
 let filesToUploadGlobally = [];
 let globalSelectedChunkSize = 4 * 1024 * 1024; // Default 4MB
@@ -198,7 +198,7 @@ function updateUploadProgressUI(uploadId, fileName, percentage, statusText, file
         const cancelButton = uploadItemElement.querySelector('.upload-cancel-button');
         if (cancelButton) {
             cancelButton.addEventListener('click', () => {
-                if (window.confirm(`Sei sicuro di voler annullare l'upload di "${fileName}"?`)) {
+                if (window.confirm(`Sei sicuro di voler annullare l'upload di \"${fileName}\"?`)) {
                     if (window.cancelUploadFile) { 
                         window.cancelUploadFile(uploadId);
                     } else {
@@ -236,9 +236,7 @@ function updateUploadProgressUI(uploadId, fileName, percentage, statusText, file
         if(cancelButtonElem) cancelButtonElem.style.display = 'block';
     }
     
-    // *** MODIFICA CHIAVE QUI ***
-    // Controlla se la uploadProgressBox è visibile usando getComputedStyle
-    if (uploadProgressBox) { // Assicura che uploadProgressBox esista
+    if (uploadProgressBox) { 
         const computedStyle = window.getComputedStyle(uploadProgressBox);
         if (computedStyle.display === 'none') {
             console.log("[AppLogic] uploadProgressBox è nascosto (computedStyle), chiamo showUploadProgressBox()");
@@ -247,7 +245,6 @@ function updateUploadProgressUI(uploadId, fileName, percentage, statusText, file
     } else {
         console.error("[AppLogic] uploadProgressBox non trovato nel DOM durante updateUploadProgressUI.");
     }
-    // *** FINE MODIFICA CHIAVE ***
 
     checkOverallUploadStatus(); 
 }
@@ -369,7 +366,7 @@ function handleCreateFolderConfirm() {
 function showDeleteConfirmModal(itemDetails) {
     if(!deleteConfirmModal || !deleteItemNameElement || !deleteWarningMessageElement) return;
     globalItemToDelete = itemDetails;
-    deleteItemNameElement.textContent = `Elemento: "${itemDetails.itemName}"`;
+    deleteItemNameElement.textContent = `Elemento: \"${itemDetails.itemName}\"`;
     deleteWarningMessageElement.textContent = itemDetails.warningMessage || "Sei sicuro di voler eliminare questo elemento? Questa azione non può essere annullata.";
     deleteConfirmModal.style.display = 'flex';
 }
@@ -466,9 +463,18 @@ window.handleBackendMessage = (message) => {
         if (window.handleTreeviewBackendResponse) { 
             window.handleTreeviewBackendResponse(message);
         }
-        if (window.handleFilelistBackendResponse) { 
-            window.handleFilelistBackendResponse(message);
+        // *** MODIFICA PER DEBUG ***
+        console.log('[AppLogic] Prima di chiamare window.handleFilelistBackendResponse. Tipo:', typeof window.handleFilelistBackendResponse);
+        if (typeof window.handleFilelistBackendResponse === 'function') { // Verifica più robusta
+            try {
+                window.handleFilelistBackendResponse(message);
+            } catch (e) {
+                console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse:', e);
+            }
+        } else {
+            console.error('[AppLogic] window.handleFilelistBackendResponse NON è definito o non è una funzione!');
         }
+        // *** FINE MODIFICA PER DEBUG ***
     } else if (message.type === 'get_filesystems_response') { 
         if (window.handleTreeviewBackendResponse) { 
             window.handleTreeviewBackendResponse(message);
@@ -476,8 +482,15 @@ window.handleBackendMessage = (message) => {
     } else if (message.type === 'create_directory_response' ||
                message.type === 'delete_item_response' ||
                message.type === 'check_directory_contents_request_response') { 
-        if (window.handleFilelistBackendResponse) { 
-            window.handleFilelistBackendResponse(message);
+        // Ensure filelist controller handles these if it's defined
+        if (typeof window.handleFilelistBackendResponse === 'function') {
+            try {
+                window.handleFilelistBackendResponse(message);
+            } catch (e) {
+                console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse per create/delete/check:', e);
+            }
+        } else {
+             console.warn('[AppLogic] window.handleFilelistBackendResponse non definito per create/delete/check.');
         }
     } else if (message.type === 'pong') {
         if (window.handlePongMessage) { 
@@ -495,13 +508,20 @@ window.handleBackendMessage = (message) => {
         if (window.handleTreeviewBackendResponse) { 
             window.handleTreeviewBackendResponse(message); 
         }
-        if (window.handleFilelistBackendResponse) { 
-            window.handleFilelistBackendResponse(message); 
+        // Ensure filelist controller handles errors if it's defined
+        if (typeof window.handleFilelistBackendResponse === 'function') {
+            try {
+                window.handleFilelistBackendResponse(message); 
+            } catch (e) {
+                 console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse per errore backend:', e);
+            }
+        } else {
+            console.warn('[AppLogic] window.handleFilelistBackendResponse non definito per errore backend.');
         }
         
         let isErrorHandledByController = false;
         if (message.request_id) {
-            if (document.querySelector(`li[data-pending-request-id="${message.request_id}"]`)) {
+            if (document.querySelector(`li[data-pending-request-id=\"${message.request_id}\"]`)) {
                 // Gestito da treeview_controller (o almeno dovrebbe)
             }
             if (window.lastFilelistRequestId === message.request_id) {
@@ -519,4 +539,4 @@ window.handleBackendMessage = (message) => {
 // --- Load Event ---
 window.addEventListener('load', initializeAppUI);
 
-console.log('app_logic.js loaded');
+console.log('app_logic.js loaded'); // Log finale del file

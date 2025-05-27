@@ -1,10 +1,11 @@
 // static/js/filelist_controller.js
 // Manages the filelist logic.
+console.log('--- EXECUTING filelist_controller.js ---'); // NUOVO LOG INIZIALE
 
 (function() {
     const filelistTableBody = document.getElementById('filelist-table')?.querySelector('tbody');
     const uploadFileInput = document.getElementById('upload-file-input');
-    const triggerUploadBtn = document.getElementById('trigger-upload-btn'); // New ID
+    const triggerUploadBtn = document.getElementById('trigger-upload-btn');
     
     const nameFilterInput = document.getElementById('name-filter');
     const timestampFilterInput = document.getElementById('timestamp-filter');
@@ -26,7 +27,7 @@
     let totalItemsFilelist = 0;
     let currentNameFilter = '';
     let currentTimestampFilter = '';
-    window.lastFilelistRequestId = null; // Made global for app_logic.js to check
+    window.lastFilelistRequestId = null; 
 
     const ongoingUploadsMap = new Map();
 
@@ -34,7 +35,6 @@
         if (window.addMessageToHistory) {
             window.addMessageToHistory(`Filelist: ${message}`, type);
         }
-        // Use toast for user-facing notifications
         if (window.showToast && (type === 'success' || type === 'error' || type === 'warning')) {
             let toastMsg = message;
             if (details.filename) toastMsg = `${details.filename}: ${message}`;
@@ -45,7 +45,24 @@
     
     // Exposed to app_logic.js
     window.handleFilelistBackendResponse = (message) => {
-        console.log('FilelistCtrl - Backend message received:', message);
+        console.log('FilelistCtrl - Backend message received (raw object):', message); 
+
+        if (message.type === 'list_directory_response') {
+            console.log('FilelistCtrl - list_directory_response raw payload (stringified):', JSON.stringify(message.payload, null, 2));
+            if (message.payload) {
+                console.log('FilelistCtrl - message.payload.items type:', typeof message.payload.items);
+                console.log('FilelistCtrl - message.payload.items isArray:', Array.isArray(message.payload.items));
+                if (Array.isArray(message.payload.items)) {
+                    console.log('FilelistCtrl - message.payload.items length:', message.payload.items.length);
+                }
+                console.log('FilelistCtrl - message.payload.total_items:', message.payload.total_items);
+                console.log('FilelistCtrl - message.payload.page:', message.payload.page);
+                console.log('FilelistCtrl - message.payload.items_per_page:', message.payload.items_per_page);
+            } else {
+                console.log('FilelistCtrl - message.payload is null or undefined for list_directory_response');
+            }
+        }
+
 
         if (message.request_id && message.request_id !== window.lastFilelistRequestId && message.type === 'list_directory_response') {
             console.warn(`FilelistCtrl - Ignored obsolete list_directory_response (ID: ${message.request_id}). Expected: ${window.lastFilelistRequestId}`);
@@ -56,67 +73,75 @@
         switch (message.type) {
             case 'list_directory_response':
                 if (message.payload && Array.isArray(message.payload.items)) {
+                    console.log('FilelistCtrl - Rendering file list with items:', message.payload.items);
                     renderFileList(message.payload.items);
                     totalItemsFilelist = message.payload.total_items;
-                    currentFilelistPage = message.payload.page;
+                    currentFilelistPage = message.payload.page; 
                     itemsPerPageFilelist = message.payload.items_per_page;
                     updatePaginationControls();
                 } else {
-                    console.error('FilelistCtrl - Invalid list_directory_response payload:', message.payload);
-                    notifyAppLogic('Errore nel caricare la lista file: dati non validi.', 'error');
+                    console.error('FilelistCtrl - Invalid list_directory_response payload or items not an array. Payload:', message.payload);
+                    notifyAppLogic('Errore nel caricare la lista file: dati non validi o mancanti.', 'error');
                     renderFileList([]); 
                     totalItemsFilelist = 0;
-                    currentFilelistPage = 1;
                     updatePaginationControls();
                 }
                 if(window.hideFilelistLoadingSpinner) window.hideFilelistLoadingSpinner();
                 break;
             case 'create_directory_response':
-                notifyAppLogic(`Cartella "${message.payload.name || message.payload.dir_path}" creata.`, 'success', {filename: message.payload.name});
+                notifyAppLogic(`Cartella \"${message.payload.name || message.payload.dir_path}\" creata.`, 'success', {filename: message.payload.name});
                 resetPaginationAndLoadFiles();
                 break;
             case 'delete_item_response':
-                notifyAppLogic(`Elemento "${message.payload.name || message.payload.item_path}" eliminato.`, 'success', {filename: message.payload.name});
+                notifyAppLogic(`Elemento \"${message.payload.name || message.payload.item_path}\" eliminato.`, 'success', {filename: message.payload.name});
                 resetPaginationAndLoadFiles();
                 break;
             case 'check_directory_contents_response':
                 const { has_contents } = message.payload;
-                const checkDetails = globalOngoingDeleteCheck; // Use global var from app_logic
+                const checkDetails = window.globalOngoingDeleteCheck; 
                 if (checkDetails) {
                     if (window.showGlobalDeleteConfirmModal) {
                         window.showGlobalDeleteConfirmModal({
                             ...checkDetails,
                             warningMessage: has_contents ?
-                                `Questa cartella contiene elementi. Sei sicuro di voler eliminare "${checkDetails.itemName}" e tutto il suo contenuto? Questa azione non può essere annullata.` :
-                                `Sei sicuro di voler eliminare "${checkDetails.itemName}"? Questa azione non può essere annullata.`
+                                `Questa cartella contiene elementi. Sei sicuro di voler eliminare \"${checkDetails.itemName}\" e tutto il suo contenuto? Questa azione non può essere annullata.` :
+                                `Sei sicuro di voler eliminare \"${checkDetails.itemName}\"? Questa azione non può essere annullata.`
                         });
                     }
                 }
-                globalOngoingDeleteCheck = null; // Clear after use
+                if (window.hasOwnProperty('globalOngoingDeleteCheck')) { 
+                    window.globalOngoingDeleteCheck = null; 
+                }
                 break;
-            case 'error': // Errors specific to filelist operations might be handled here too
-                console.error('FilelistCtrl - Error from backend:', message.payload.error);
-                notifyAppLogic(`Operazione fallita: ${message.payload.error}`, 'error', {error: message.payload.error});
+            case 'error': 
+                console.error('FilelistCtrl - Error from backend:', message.payload ? message.payload.error : 'Unknown error payload');
+                notifyAppLogic(`Operazione fallita: ${message.payload ? message.payload.error : 'Errore sconosciuto'}`, 'error', {error: message.payload ? message.payload.error : 'Errore sconosciuto'});
                 if(window.hideFilelistLoadingSpinner) window.hideFilelistLoadingSpinner();
                 break;
         }
     };
     
-    // Exposed to app_logic.js
     window.loadFilelistForPath = (storageName, dirPath) => {
+        console.log(`FilelistCtrl - loadFilelistForPath called with storage: ${storageName}, path: ${dirPath}`);
         currentFilelistStorageName = storageName;
         currentFilelistDirPath = dirPath;
-        currentFilelistPage = 1; // Reset page on new path
         updateCurrentPathDisplay();
+        fetchFilelistPage(1); 
+    };
+
+    function fetchFilelistPage(pageToList) {
+        console.log(`FilelistCtrl - fetchFilelistPage called for page: ${pageToList}`);
         if(window.showFilelistLoadingSpinner) window.showFilelistLoadingSpinner();
+        currentFilelistPage = pageToList; 
 
         if (window.sendMessage) {
+            console.log(`FilelistCtrl - Sending list_directory request. Storage: ${currentFilelistStorageName}, Path: ${currentFilelistDirPath}, Page: ${currentFilelistPage}`);
             window.lastFilelistRequestId = window.sendMessage({
                 type: 'list_directory',
                 payload: {
                     storage_name: currentFilelistStorageName,
                     dir_path: currentFilelistDirPath,
-                    page: currentFilelistPage,
+                    page: currentFilelistPage, 
                     items_per_page: itemsPerPageFilelist,
                     name_filter: currentNameFilter,
                     timestamp_filter: currentTimestampFilter
@@ -126,7 +151,7 @@
             console.error('FilelistCtrl - sendMessage function is not available.');
             if(window.hideFilelistLoadingSpinner) window.hideFilelistLoadingSpinner();
         }
-    };
+    }
 
     function updateCurrentPathDisplay() {
         const displayPath = currentFilelistDirPath === '' ? '/' : `/${currentFilelistDirPath}`;
@@ -134,13 +159,17 @@
     }
 
     function resetPaginationAndLoadFiles() {
-        currentFilelistPage = 1;
-        window.loadFilelistForPath(currentFilelistStorageName, currentFilelistDirPath);
+        console.log('FilelistCtrl - resetPaginationAndLoadFiles called.');
+        fetchFilelistPage(1); 
     }
 
     function renderFileList(items) {
-        if (!filelistTableBody) return;
-        filelistTableBody.innerHTML = '';
+        console.log('FilelistCtrl - renderFileList called with items:', items);
+        if (!filelistTableBody) {
+            console.error('FilelistCtrl - filelistTableBody not found in DOM for renderFileList.');
+            return;
+        }
+        filelistTableBody.innerHTML = ''; 
 
         if (currentFilelistDirPath !== '') {
             const tr = document.createElement('tr');
@@ -148,8 +177,8 @@
             nameTd.textContent = '..';
             nameTd.style.fontWeight = 'bold';
             nameTd.style.cursor = 'pointer';
-            nameTd.colSpan = 5;
-            nameTd.dataset.isdir = "true"; // Mark as directory for styling/logic
+            nameTd.colSpan = 5; 
+            nameTd.dataset.isdir = "true"; 
             nameTd.addEventListener('click', () => {
                 const parentPath = currentFilelistDirPath.substring(0, currentFilelistDirPath.lastIndexOf('/'));
                 window.loadFilelistForPath(currentFilelistStorageName, parentPath);
@@ -158,14 +187,17 @@
             filelistTableBody.appendChild(tr);
         }
 
+        if (!Array.isArray(items)) {
+            console.error('FilelistCtrl - renderFileList received non-array items:', items);
+            return;
+        }
+
         items.forEach(item => {
             const tr = document.createElement('tr');
             const nameTd = document.createElement('td');
             nameTd.textContent = item.name;
             if (item.is_dir) {
                 nameTd.dataset.isdir = "true";
-                nameTd.style.fontWeight = 'bold'; // Already handled by CSS, but kept for clarity
-                nameTd.style.cursor = 'pointer'; // Already handled by CSS
                 nameTd.addEventListener('click', () => {
                     window.loadFilelistForPath(currentFilelistStorageName, item.path);
                 });
@@ -195,7 +227,7 @@
             }
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = 'Elimina';
-            deleteBtn.classList.add('delete-btn'); // Use class for styling
+            deleteBtn.classList.add('delete-btn'); 
             deleteBtn.addEventListener('click', () => {
                 const deleteDetails = {
                     storageName: currentFilelistStorageName,
@@ -203,7 +235,9 @@
                     itemName: item.name
                 };
                 if (item.is_dir) {
-                    globalOngoingDeleteCheck = deleteDetails; // Store details for when response comes
+                    if (window.hasOwnProperty('globalOngoingDeleteCheck')) {
+                         window.globalOngoingDeleteCheck = deleteDetails; 
+                    }
                      if (window.sendMessage) {
                         window.sendMessage({
                             type: 'check_directory_contents_request',
@@ -218,28 +252,31 @@
             tr.appendChild(actionsTd);
             filelistTableBody.appendChild(tr);
         });
+        console.log(`FilelistCtrl - Rendered ${items.length} items.`);
     }
 
     function updatePaginationControls() {
-        if (!currentPageSpan || !totalPagesSpan || !prevPageBtn || !nextPageBtn) return;
+        if (!currentPageSpan || !totalPagesSpan || !prevPageBtn || !nextPageBtn) {
+            console.warn("FilelistCtrl - Pagination control elements not found.");
+            return;
+        }
         const totalPages = Math.ceil(totalItemsFilelist / itemsPerPageFilelist) || 1;
         currentPageSpan.textContent = currentFilelistPage;
         totalPagesSpan.textContent = totalPages;
         prevPageBtn.disabled = currentFilelistPage <= 1;
         nextPageBtn.disabled = currentFilelistPage >= totalPages;
+        console.log(`FilelistCtrl - Pagination updated: Page ${currentFilelistPage} of ${totalPages}. Total items: ${totalItemsFilelist}`);
     }
 
     if(prevPageBtn) prevPageBtn.addEventListener('click', () => {
         if (currentFilelistPage > 1) {
-            currentFilelistPage--;
-            window.loadFilelistForPath(currentFilelistStorageName, currentFilelistDirPath);
+            fetchFilelistPage(currentFilelistPage - 1);
         }
     });
     if(nextPageBtn) nextPageBtn.addEventListener('click', () => {
         const totalPages = Math.ceil(totalItemsFilelist / itemsPerPageFilelist);
         if (currentFilelistPage < totalPages) {
-            currentFilelistPage++;
-            window.loadFilelistForPath(currentFilelistStorageName, currentFilelistDirPath);
+            fetchFilelistPage(currentFilelistPage + 1);
         }
     });
 
@@ -256,6 +293,7 @@
         } else {
             currentTimestampFilter = '';
         }
+        console.log(`FilelistCtrl - Applying filters. Name: '${currentNameFilter}', Timestamp: '${currentTimestampFilter}'`);
         resetPaginationAndLoadFiles();
     }
     if(applyFiltersBtn) applyFiltersBtn.addEventListener('click', applyFilters);
@@ -267,6 +305,7 @@
         if(enableTimestampFilterCheckbox) enableTimestampFilterCheckbox.checked = false;
         currentNameFilter = '';
         currentTimestampFilter = '';
+        console.log('FilelistCtrl - Filters cleared.');
         resetPaginationAndLoadFiles();
     }
     if(clearFiltersBtn) clearFiltersBtn.addEventListener('click', clearFilters);
@@ -314,11 +353,12 @@
         }
     }
 
-    // Exposed to app_logic.js
     window.initiateFileUploads = async (files, chunkSize, parallelChunks) => {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            const uploadId = `${Date.now()}-${i}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '')}`;
+            // La riga problematica è stata divisa in due:
+            const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '');
+            const uploadId = `${Date.now()}-${i}-${safeFileName}`;
             const filePath = currentFilelistDirPath === '' ? file.name : `${currentFilelistDirPath}/${file.name}`;
             
             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Inizio calcolo SHA256...', filePath);
@@ -335,10 +375,9 @@
                 uploadedSize: 0, blockIDs: [], expectedFileSize: file.size,
                 isUploading: true, activeChunkUploads: 0, chunkQueue: [],
                 activeXHRs: new Set(),
-                resolve: null, reject: null // Promises will be set up per upload
+                resolve: null, reject: null 
             });
             
-            // Start the actual upload process for this file
             startSingleFileUpload(uploadId);
         }
     };
@@ -371,16 +410,23 @@
                 const data = await initiateResponse.json();
                 uploadState.uploadedSize = data.uploaded_size || 0;
                 
-                const initialPercentage = (uploadState.uploadedSize / uploadState.expectedFileSize) * 100;
+                const initialPercentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 0;
                 if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, initialPercentage, uploadState.uploadedSize > 0 ? 'Ripresa upload...' : 'Caricamento...', uploadState.filePath);
 
                 let currentOffset = uploadState.uploadedSize;
-                let currentChunkIndex = Math.floor(uploadState.uploadedSize / uploadState.chunkSize);
+                let currentChunkIndex = uploadState.expectedFileSize > 0 && uploadState.chunkSize > 0 ? Math.floor(uploadState.uploadedSize / uploadState.chunkSize) : 0;
+                
+                if (uploadState.expectedFileSize === 0) { 
+                    finalizeUploadInternal(uploadId);
+                    return;
+                }
+
                 while (currentOffset < uploadState.expectedFileSize) {
-                    const chunk = uploadState.file.slice(currentOffset, currentOffset + uploadState.chunkSize);
-                    const blockID = btoa(String(currentChunkIndex).padStart(20, '0')); // For Azure Blob
+                    const chunkEnd = Math.min(currentOffset + uploadState.chunkSize, uploadState.expectedFileSize);
+                    const chunk = uploadState.file.slice(currentOffset, chunkEnd);
+                    const blockID = btoa(String(currentChunkIndex).padStart(20, '0')); 
                     uploadState.chunkQueue.push({ chunk, blockID, index: currentChunkIndex });
-                    currentOffset += uploadState.chunkSize;
+                    currentOffset += chunk.size; 
                     currentChunkIndex++;
                 }
                 for (let i = 0; i < uploadState.parallelChunks; i++) {
@@ -388,19 +434,20 @@
                 }
             } catch (error) {
                 console.error(`FilelistCtrl - Errore critico durante l'upload ID ${uploadId}:`, error);
-                if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, uploadState.uploadedSize / uploadState.expectedFileSize * 100, `Errore: ${error.message}`, uploadState.filePath, true, 'failed');
+                const errorPercentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 0;
+                if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, errorPercentage, `Errore: ${error.message}`, uploadState.filePath, true, 'failed');
                 uploadState.isUploading = false;
                 ongoingUploadsMap.delete(uploadId);
-                reject(error); // Reject the promise for this upload
+                reject(error); 
             }
         }).catch(err => {
             console.error(`FilelistCtrl - Upload fallito per ${uploadState.file.name}: ${err.message}`);
-            // Ensure UI is updated if not already
-            if(window.updateGlobalUploadProgress && uploadState.isUploading) { // Check isUploading to avoid double notification
-                 window.updateGlobalUploadProgress(uploadId, uploadState.file.name, uploadState.uploadedSize / uploadState.expectedFileSize * 100, `Fallito: ${err.message}`, uploadState.filePath, true, 'failed');
+            if(uploadState && window.updateGlobalUploadProgress && uploadState.isUploading) { 
+                 const errorPercentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 0;
+                 window.updateGlobalUploadProgress(uploadId, uploadState.file.name, errorPercentage, `Fallito: ${err.message}`, uploadState.filePath, true, 'failed');
             }
-            uploadState.isUploading = false; // Ensure it's marked as not uploading
-            ongoingUploadsMap.delete(uploadId); // Clean up
+            if(uploadState) uploadState.isUploading = false; 
+            ongoingUploadsMap.delete(uploadId); 
         });
     }
 
@@ -409,7 +456,13 @@
         if (!uploadState || !uploadState.isUploading) return;
 
         if (uploadState.chunkQueue.length === 0 && uploadState.activeChunkUploads === 0) {
-            finalizeUploadInternal(uploadId);
+            if (uploadState.uploadedSize >= uploadState.expectedFileSize) { 
+                 finalizeUploadInternal(uploadId);
+            } else if (uploadState.expectedFileSize > 0) { 
+                console.warn(`FilelistCtrl - Attempted to finalize ${uploadId} but not all data seems uploaded. Uploaded: ${uploadState.uploadedSize}, Expected: ${uploadState.expectedFileSize}`);
+            } else { 
+                 finalizeUploadInternal(uploadId);
+            }
             return;
         }
         if (uploadState.activeChunkUploads >= uploadState.parallelChunks || uploadState.chunkQueue.length === 0) {
@@ -423,24 +476,21 @@
         formData.append('storage', uploadState.storageName);
         formData.append('path', uploadState.filePath);
         formData.append('action', 'chunk');
-        formData.append('block_id', blockID); // For Azure
-        formData.append('chunk_index', chunkIndex.toString()); // For Local
-        formData.append('chunk_size', uploadState.chunkSize.toString()); // For Local
+        formData.append('block_id', blockID); 
+        formData.append('chunk_index', chunkIndex.toString()); 
+        formData.append('chunk_size', uploadState.chunkSize.toString()); 
         formData.append('chunk', chunk);
 
         const xhr = new XMLHttpRequest();
         uploadState.activeXHRs.add(xhr);
         
         xhr.open('POST', '/upload', true);
-        xhr.timeout = 300000; // 5 minutes timeout for chunk
+        xhr.timeout = 300000; 
 
         if (xhr.upload) {
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
-                    const chunkProgress = event.loaded; // Progress within the current chunk
-                    const overallUploaded = uploadState.uploadedSize + chunkProgress;
-                    const percentage = (overallUploaded / uploadState.expectedFileSize) * 100;
-                    if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, `Caricamento chunk ${chunkIndex + 1}...`, uploadState.filePath);
+                    // Progress handled in onload
                 }
             };
         }
@@ -450,19 +500,19 @@
             uploadState.activeChunkUploads--;
             if (xhr.status >= 200 && xhr.status < 300) {
                 if (uploadState.isUploading) {
-                    uploadState.uploadedSize += chunk.size; // Crucial: update uploadedSize only after successful chunk upload
-                    uploadState.blockIDs.push(blockID); // For Azure
-                    const percentage = (uploadState.uploadedSize / uploadState.expectedFileSize) * 100;
+                    uploadState.uploadedSize += chunk.size; 
+                    uploadState.blockIDs.push(blockID); 
+                    const percentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 100;
                     if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, `Chunk ${chunkIndex + 1} caricato.`, uploadState.filePath);
                 }
             } else {
                 const errorText = xhr.responseText || `Errore HTTP: ${xhr.status}`;
                 console.error(`FilelistCtrl - Errore caricamento chunk ${chunkIndex} per ${uploadState.file.name}: ${errorText}`);
-                uploadState.isUploading = false; // Stop further processing for this file
-                uploadState.reject(new Error(errorText)); // Reject the promise for this upload
-                return; // Stop processing more chunks for this failed upload
+                uploadState.isUploading = false; 
+                uploadState.reject(new Error(errorText)); 
+                return; 
             }
-            processNextChunkInternal(uploadId); // Process next chunk
+            processNextChunkInternal(uploadId); 
         };
         xhr.onerror = () => {
             uploadState.activeXHRs.delete(xhr);
@@ -472,12 +522,11 @@
             uploadState.isUploading = false;
             uploadState.reject(new Error(errorMsg));
         };
-        xhr.onabort = () => { // Handle user cancellation
+        xhr.onabort = () => { 
             uploadState.activeXHRs.delete(xhr);
             uploadState.activeChunkUploads--;
             console.log(`FilelistCtrl - Upload chunk ${chunkIndex} annullato per ${uploadState.file.name}.`);
-            // No reject here, as cancellation is handled by cancelUploadFile
-            processNextChunkInternal(uploadId); // Allow other parallel uploads to continue if any
+            processNextChunkInternal(uploadId); 
         };
         xhr.ontimeout = () => {
             uploadState.activeXHRs.delete(xhr);
@@ -492,22 +541,27 @@
 
     async function finalizeUploadInternal(uploadId) {
         const uploadState = ongoingUploadsMap.get(uploadId);
-        if (!uploadState || !uploadState.isUploading) return;
+        if (!uploadState || !uploadState.isUploading) {
+            if (uploadState && !uploadState.isUploading) {
+                 console.log(`FilelistCtrl - finalizeUploadInternal called for ${uploadId}, but isUploading is false. Skipping.`);
+            }
+            return;
+        }
 
-        if (uploadState.uploadedSize < uploadState.expectedFileSize) {
-             const errorMsg = "Finalizzazione fallita: non tutti i chunk sono stati caricati.";
+        if (uploadState.expectedFileSize > 0 && uploadState.uploadedSize < uploadState.expectedFileSize) {
+             const errorMsg = `Finalizzazione fallita: non tutti i chunk sono stati caricati. Attesi: ${uploadState.expectedFileSize}, Caricati: ${uploadState.uploadedSize}`;
              console.warn(`FilelistCtrl - ${errorMsg} (File: ${uploadState.file.name})`);
-             uploadState.reject(new Error(errorMsg));
+             uploadState.reject(new Error(errorMsg)); 
+             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, (uploadState.uploadedSize / uploadState.expectedFileSize) * 100, `Errore: ${errorMsg}`, uploadState.filePath, true, 'failed');
+             ongoingUploadsMap.delete(uploadId); 
              return;
         }
 
         if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, 100, 'Finalizzazione e verifica...', uploadState.filePath);
-        // --- INIZIO MODIFICA CLIENT (Ordinamento blockID) ---
         uploadState.blockIDs.sort();
         if (console && console.debug) { 
-            console.debug(`FilelistCtrl - Block IDs ordinati per ${uploadState.file.name}:`, JSON.stringify(uploadState.blockIDs)); // Aggiunto JSON.stringify per una migliore visualizzazione
+            console.debug(`FilelistCtrl - Block IDs ordinati per ${uploadState.file.name}:`, JSON.stringify(uploadState.blockIDs)); 
         }
-        // --- FINE MODIFICA CLIENT ---
         try {
             const finalizeResponse = await fetch('/upload', {
                 method: 'POST',
@@ -516,7 +570,7 @@
                     storage: uploadState.storageName,
                     path: uploadState.filePath,
                     action: 'finalize',
-                    block_ids: JSON.stringify(uploadState.blockIDs), // For Azure
+                    block_ids: JSON.stringify(uploadState.blockIDs), 
                     client_sha256: uploadState.clientSHA256,
                     total_file_size: uploadState.expectedFileSize.toString()
                 })
@@ -526,12 +580,13 @@
                 throw new Error(`Errore finalizzazione: ${finalizeResponse.status} - ${errorText}`);
             }
             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, 100, 'Completato!', uploadState.filePath, true, 'complete');
-            notifyAppLogic(`Upload di "${uploadState.file.name}" completato.`, 'success', {filename: uploadState.file.name});
-            uploadState.resolve(); // Resolve the promise for this upload
-            resetPaginationAndLoadFiles(); // Refresh file list
+            notifyAppLogic(`Upload di \"${uploadState.file.name}\" completato.`, 'success', {filename: uploadState.file.name});
+            if(uploadState.resolve) uploadState.resolve(); 
+            resetPaginationAndLoadFiles(); 
         } catch (error) {
             console.error(`FilelistCtrl - Errore durante finalizzazione upload ${uploadState.file.name}:`, error);
-            uploadState.reject(error); // Reject the promise
+            if(uploadState.reject) uploadState.reject(error); 
+            if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, 100, `Errore finalizzazione: ${error.message}`, uploadState.filePath, true, 'failed');
         } finally {
             uploadState.isUploading = false;
             ongoingUploadsMap.delete(uploadId);
@@ -540,22 +595,31 @@
 
     window.cancelUploadFile = async (uploadId) => {
         const uploadState = ongoingUploadsMap.get(uploadId);
-        if (!uploadState || !uploadState.isUploading) {
-            console.warn(`FilelistCtrl - Tentativo di annullare upload ${uploadId} non in corso o non trovato.`);
-            if(window.updateGlobalUploadProgress) { // Update UI if entry exists but not uploading
-                const file = uploadState ? uploadState.file : {name: "Sconosciuto"};
-                const filePath = uploadState ? uploadState.filePath : "N/A";
-                window.updateGlobalUploadProgress(uploadId, file.name, 0, 'Annullato (stato precedente non attivo).', filePath, true, 'cancelled');
+        if (!uploadState) { 
+            console.warn(`FilelistCtrl - Tentativo di annullare upload ${uploadId} non trovato.`);
+             if(window.updateGlobalUploadProgress) {
+                window.updateGlobalUploadProgress(uploadId, "Sconosciuto", 0, 'Annullato (sessione non trovata).', "N/A", true, 'cancelled');
             }
-            if(uploadState) ongoingUploadsMap.delete(uploadId); // Clean up if entry exists
             return;
         }
+
+        if (!uploadState.isUploading) {
+            console.warn(`FilelistCtrl - Tentativo di annullare upload ${uploadId} (${uploadState.file.name}) che non è in corso.`);
+            if(window.updateGlobalUploadProgress) {
+                const percentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 0;
+                window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, 'Annullato (non era attivo).', uploadState.filePath, true, 'cancelled');
+            }
+            ongoingUploadsMap.delete(uploadId); 
+            return;
+        }
+
         console.log(`FilelistCtrl - Annullamento upload ID: ${uploadId} (${uploadState.file.name})`);
-        uploadState.isUploading = false; // Prevent further processing
+        uploadState.isUploading = false; 
         uploadState.activeXHRs.forEach(xhr => xhr.abort());
         uploadState.activeXHRs.clear();
         
-        if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, (uploadState.uploadedSize / uploadState.expectedFileSize) * 100, 'Annullamento...', uploadState.filePath);
+        const percentage = uploadState.expectedFileSize > 0 ? (uploadState.uploadedSize / uploadState.expectedFileSize) * 100 : 0;
+        if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, 'Annullamento...', uploadState.filePath);
 
         try {
             await fetch('/upload', {
@@ -567,20 +631,18 @@
                     action: 'cancel'
                 })
             });
-            notifyAppLogic(`Upload di "${uploadState.file.name}" annullato.`, 'warning', {filename: uploadState.file.name});
-            if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, (uploadState.uploadedSize / uploadState.expectedFileSize) * 100, 'Annullato.', uploadState.filePath, true, 'cancelled');
+            notifyAppLogic(`Upload di \"${uploadState.file.name}\" annullato.`, 'warning', {filename: uploadState.file.name});
+            if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, 'Annullato.', uploadState.filePath, true, 'cancelled');
         } catch (error) {
             console.error(`FilelistCtrl - Errore durante annullamento server per ${uploadState.file.name}:`, error);
-            notifyAppLogic(`Errore durante annullamento upload di "${uploadState.file.name}".`, 'error', {filename: uploadState.file.name, error: error.message});
-             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, (uploadState.uploadedSize / uploadState.expectedFileSize) * 100, 'Errore annullamento.', uploadState.filePath, true, 'failed');
+            notifyAppLogic(`Errore durante annullamento upload di \"${uploadState.file.name}\".`, 'error', {filename: uploadState.file.name, error: error.message});
+             if(window.updateGlobalUploadProgress) window.updateGlobalUploadProgress(uploadId, uploadState.file.name, percentage, 'Errore annullamento.', uploadState.filePath, true, 'failed');
         } finally {
-            uploadState.reject(new Error('Upload annullato dall\'utente.')); // Reject the promise
-            ongoingUploadsMap.delete(uploadId); // Clean up
-            // Non ricaricare la lista file qui, l'utente potrebbe voler vedere lo stato parziale
+            if(uploadState.reject) uploadState.reject(new Error('Upload annullato dall\'utente.'));
+            ongoingUploadsMap.delete(uploadId); 
         }
     };
 
-    // Exposed to app_logic.js for creating directories
     window.requestCreateDirectory = (storageName, dirPath, folderName) => {
         const newDirPath = dirPath === '' ? folderName : `${dirPath}/${folderName}`;
         if (window.sendMessage) {
@@ -588,31 +650,22 @@
                 type: 'create_directory',
                 payload: { storage_name: storageName, dir_path: newDirPath }
             });
-            notifyAppLogic(`Richiesta creazione cartella "${folderName}"...`, 'info', {filename: folderName});
+            notifyAppLogic(`Richiesta creazione cartella \"${folderName}\"...`, 'info', {filename: folderName});
         }
     };
 
-    // Exposed to app_logic.js for deleting items
     window.requestDeleteItem = (storageName, itemPath, itemName) => {
          if (window.sendMessage) {
             window.sendMessage({
                 type: 'delete_item',
                 payload: { storage_name: storageName, item_path: itemPath }
             });
-            notifyAppLogic(`Richiesta eliminazione "${itemName}"...`, 'info', {filename: itemName});
+            notifyAppLogic(`Richiesta eliminazione \"${itemName}\"...`, 'info', {filename: itemName});
         }
     };
     
-    // Ensure DOM elements are available before adding event listeners
     document.addEventListener('DOMContentLoaded', () => {
-        // Re-check elements and add listeners if they were not available initially
-        // This is a fallback, ideally elements are found on first pass
-        if(triggerUploadBtn && !triggerUploadBtn.onclick) { // Check if listener already attached
-             triggerUploadBtn.addEventListener('click', () => { /* ... */ });
-        }
-        // Similar checks for other buttons if needed
     });
 
-
-    console.log('filelist_controller.js loaded');
+    console.log('filelist_controller.js loaded'); // Log finale del file
 })();
