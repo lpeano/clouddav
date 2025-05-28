@@ -1,542 +1,410 @@
 // static/js/app_logic.js
-// Main application logic, UI interactions, and coordination
-console.log('--- EXECUTING app_logic.js ---'); // NUOVO LOG INIZIALE
 
-// --- Global State ---\nlet currentSelectedStorageName = '';
-let currentSelectedDirPath = '';
-let filesToUploadGlobally = [];
-let globalSelectedChunkSize = 4 * 1024 * 1024; // Default 4MB
-let globalSelectedParallelChunks = 4; // Default 4
-const globalUploadItems = new Map();
-let globalItemToDelete = null;
-let globalOngoingDeleteCheck = null;
+if (!window.config) {
+    console.error("AppLogic FATAL: window.config non definito! Assicurati che config.js sia caricato prima di app_logic.js.");
+    window.config = { 
+        LogLevelDebug: 'DEBUG', LogLevelInfo: 'INFO', LogLevelWarning: 'WARNING', LogLevelError: 'ERROR',
+        currentLogLevel: 'DEBUG', 
+        IsLogLevel: function(levelToCheck) {
+            if (!this.currentLogLevel) return false;
+            const levels = { [this.LogLevelDebug]: 1, [this.LogLevelInfo]: 2, [this.LogLevelWarning]: 3, [this.LogLevelError]: 4 };
+            const current = levels[this.currentLogLevel];
+            const toCheck = levels[levelToCheck];
+            if (current === undefined || toCheck === undefined) return false; 
+            return toCheck >= current;
+        }
+    };
+}
 
-// --- DOM Element Cache ---
-const messageHistoryArea = document.getElementById('message-history-area');
-const messageHistoryHeader = document.getElementById('message-history-header');
-const messageHistoryToggle = document.getElementById('message-history-toggle');
-const messageList = document.getElementById('message-list');
+if (window.config && typeof config.IsLogLevel === 'function' && config.IsLogLevel(config.LogLevelInfo)) {
+    console.info("--- EXECUTING app_logic.js ---");
+}
 
-const uploadProgressBox = document.getElementById('upload-progress-box');
-const uploadProgressHeader = document.getElementById('upload-progress-header');
-const uploadHeaderText = document.getElementById('upload-header-text');
-const uploadProgressToggle = document.getElementById('upload-progress-toggle');
-const uploadItemsContainer = document.getElementById('upload-items-container');
+let isWebsocketServiceReadyForApp = window.websocket_service_ready_flag || false;
+let isDataServiceReadyForApp = window.data_service_ready_flag || false;
+window.app_logic_ready_flag = false; 
 
-const chunkSizeModal = document.getElementById('chunk-size-modal');
-const chunkSizeSlider = document.getElementById('chunk-size-slider');
-const chunkSizeDisplay = document.getElementById('chunk-size-display');
-const parallelChunksSlider = document.getElementById('parallel-chunks-slider');
-const parallelChunksDisplay = document.getElementById('parallel-chunks-display');
-const startUploadBtn = document.getElementById('start-upload-btn');
-const cancelModalBtn = document.getElementById('cancel-modal-btn');
-
-const createFolderBtn = document.getElementById('create-folder-btn');
-const createFolderModal = document.getElementById('create-folder-modal');
-const newFolderNameInput = document.getElementById('new-folder-name');
-const cancelCreateFolderBtn = document.getElementById('cancel-create-folder-btn');
-const confirmCreateFolderBtn = document.getElementById('confirm-create-folder-btn');
-
-const deleteConfirmModal = document.getElementById('delete-confirm-modal');
-const deleteItemNameElement = document.getElementById('delete-item-name');
-const deleteWarningMessageElement = document.getElementById('delete-warning-message');
-const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
-const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-
-const filelistLoadingOverlay = document.getElementById('filelist-loading-overlay');
-const websocketStatusBox = document.getElementById('websocket-status-box');
-const websocketStatusText = document.getElementById('websocket-status-text');
-
-
-// --- Initialization ---
-function initializeAppUI() {
-    console.log('AppLogic - Initializing App UI...');
-    addMessageToHistory('Applicazione inizializzata.');
-
-    if (!uploadProgressBox) console.error("AppLogic ERRORE: Elemento #upload-progress-box non trovato!");
-    if (!uploadItemsContainer) console.error("AppLogic ERRORE: Elemento #upload-items-container non trovato!");
-
-    if (messageHistoryHeader) messageHistoryHeader.addEventListener('click', toggleMessageHistory);
-    if (uploadProgressHeader) uploadProgressHeader.addEventListener('click', toggleUploadProgressBox);
-    if (uploadProgressToggle) uploadProgressToggle.addEventListener('click', toggleUploadProgressBox);
-
-    if (chunkSizeSlider) chunkSizeSlider.addEventListener('input', (event) => {
-        if(chunkSizeDisplay) chunkSizeDisplay.textContent = formatBytesForDisplay(parseInt(event.target.value, 10));
-    });
-    if (parallelChunksSlider) parallelChunksSlider.addEventListener('input', (event) => {
-        if(parallelChunksDisplay) parallelChunksDisplay.textContent = parseInt(event.target.value, 10);
-    });
-    if (startUploadBtn) startUploadBtn.addEventListener('click', handleStartUploadConfirm);
-    if (cancelModalBtn) cancelModalBtn.addEventListener('click', hideChunkSizeModal);
-    if (chunkSizeModal) chunkSizeModal.addEventListener('click', (event) => {
-        if (event.target === chunkSizeModal) hideChunkSizeModal();
-    });
-
-    if (createFolderBtn) createFolderBtn.addEventListener('click', () => showCreateFolderModal());
-    if (confirmCreateFolderBtn) confirmCreateFolderBtn.addEventListener('click', handleCreateFolderConfirm);
-    if (cancelCreateFolderBtn) cancelCreateFolderBtn.addEventListener('click', hideCreateFolderModal);
-    if (createFolderModal) createFolderModal.addEventListener('click', (event) => {
-        if (event.target === createFolderModal) hideCreateFolderModal();
-    });
-
-    if (confirmDeleteBtn) confirmDeleteBtn.addEventListener('click', handleDeleteItemConfirm);
-    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', hideDeleteConfirmModal);
-    if (deleteConfirmModal) deleteConfirmModal.addEventListener('click', (event) => {
-        if (event.target === deleteConfirmModal) hideDeleteConfirmModal();
-    });
-
-    if (window.connectWebSocket) {
-        window.connectWebSocket();
+function initializeStaticUI() {
+    if (config.IsLogLevel(config.LogLevelInfo)) {
+        console.info("AppLogic - Initializing Static UI components...");
+    }
+    
+    const msgHistoryHeader = document.getElementById('message-history-header');
+    const msgHistoryArea = document.getElementById('message-history-area');
+    const msgHistoryToggle = document.getElementById('message-history-toggle');
+    if (msgHistoryHeader && msgHistoryArea && msgHistoryToggle) {
+        msgHistoryHeader.addEventListener('click', () => {
+            msgHistoryArea.classList.toggle('expanded');
+            msgHistoryToggle.textContent = msgHistoryArea.classList.contains('expanded') ? '▼' : '▲';
+        });
     } else {
-        console.error('AppLogic - connectWebSocket function is not available.');
-        addMessageToHistory('Errore: Funzione di connessione WebSocket non disponibile.', 'error');
+        if (config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: Elementi della message history non trovati.");
     }
-
-    if (window.requestInitialTreeviewData) {
-        window.requestInitialTreeviewData();
+    
+    const uploadBoxHeader = document.getElementById('upload-progress-header');
+    const uploadBox = document.getElementById('upload-progress-box');
+    const uploadBoxToggle = document.getElementById('upload-progress-toggle');
+    if (uploadBoxHeader && uploadBox && uploadBoxToggle) {
+        const toggleUploadBoxInternal = () => { 
+            const isExpanded = uploadBox.classList.toggle('expanded');
+            uploadBoxToggle.textContent = isExpanded ? '▼' : '▲';
+            if (window.app_logic && typeof window.app_logic.checkOverallUploadStatus === 'function') window.app_logic.checkOverallUploadStatus();
+        };
+        uploadBoxHeader.addEventListener('click', toggleUploadBoxInternal);
     } else {
-        console.error('AppLogic - requestInitialTreeviewData function is not available.');
+         if (config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: Elementi del box di progresso upload non trovati.");
     }
-    console.log('AppLogic - App UI Initialized.');
-}
+    
+    const expandBtn = document.querySelector('#global-controls button[onclick="expandAllTreeviewNodes()"]');
+    if (expandBtn && window.expandAllTreeviewNodes) expandBtn.onclick = window.expandAllTreeviewNodes;
+    else if(expandBtn && !window.expandAllTreeviewNodes && config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: Bottone expandAll ma window.expandAllTreeviewNodes non def.");
+    
+    const collapseBtn = document.querySelector('#global-controls button[onclick="collapseAllTreeviewNodes()"]');
+    if (collapseBtn && window.collapseAllTreeviewNodes) collapseBtn.onclick = window.collapseAllTreeviewNodes;
+     else if(collapseBtn && !window.collapseAllTreeviewNodes && config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: Bottone collapseAll ma window.collapseAllTreeviewNodes non def.");
 
-// --- Message History ---
-function addMessageToHistory(message, type = 'info') {
-    if (!messageList) return;
-    const li = document.createElement('li');
-    const timestampSpan = document.createElement('span');
-    timestampSpan.className = 'message-timestamp';
-    timestampSpan.textContent = new Date().toLocaleTimeString();
-    li.appendChild(timestampSpan);
-    li.appendChild(document.createTextNode(message));
-    messageList.prepend(li);
-    const maxMessages = 50;
-    while (messageList.children.length > maxMessages) {
-        messageList.removeChild(messageList.lastChild);
+    // Chiama setupModalEventListeners che ora è un metodo di window.app_logic
+    if (window.app_logic && typeof window.app_logic.setupModalEventListeners === 'function') { 
+        window.app_logic.setupModalEventListeners();
+    } else if (config.IsLogLevel(config.LogLevelDebug)) {
+        console.debug("AppLogic: window.app_logic.setupModalEventListeners non definito o non è una funzione al momento di initializeStaticUI.");
     }
 }
-window.addMessageToHistory = addMessageToHistory;
 
-function toggleMessageHistory() {
-    if (!messageHistoryArea || !messageHistoryToggle) return;
-    messageHistoryArea.classList.toggle('expanded');
-    messageHistoryToggle.textContent = messageHistoryArea.classList.contains('expanded') ? '▼' : '▲';
-}
-
-// --- Upload Progress ---
-function showUploadProgressBox() {
-    console.log('[AppLogic] showUploadProgressBox chiamata.'); 
-    if (!uploadProgressBox || !uploadProgressHeader || !uploadProgressToggle || !uploadHeaderText) {
-        console.error("[AppLogic] Elementi UI per upload progress box mancanti.");
-        return;
+function initializeCoreServicesAndApp() { 
+    if (config.IsLogLevel(config.LogLevelInfo)) {
+        console.info("AppLogic - Initializing Core Services (WebSocket connection and initial data fetch)...");
     }
-    uploadProgressBox.style.display = 'block';
-    if (!uploadProgressBox.classList.contains('expanded') && !uploadProgressBox.classList.contains('upload-final-state')) {
-        uploadProgressBox.classList.add('expanded');
-        uploadProgressToggle.textContent = '▼';
-    }
-    uploadHeaderText.textContent = 'Upload in corso...';
-    uploadProgressHeader.removeEventListener('click', hideUploadProgressBox); 
-    uploadProgressToggle.removeEventListener('click', hideUploadProgressBox);
-    uploadProgressHeader.addEventListener('click', toggleUploadProgressBox);
-    uploadProgressToggle.addEventListener('click', toggleUploadProgressBox);
-}
 
-function hideUploadProgressBox() {
-    console.log('[AppLogic] hideUploadProgressBox chiamata.'); 
-    if (!uploadProgressBox || !uploadItemsContainer || !uploadProgressHeader || !uploadProgressToggle || !uploadHeaderText) return;
-    uploadProgressBox.style.display = 'none';
-    uploadItemsContainer.innerHTML = '';
-    globalUploadItems.clear();
-    uploadProgressBox.classList.remove('expanded', 'upload-final-state');
-    uploadHeaderText.textContent = 'Upload';
-    uploadProgressToggle.textContent = '▲';
-    uploadProgressHeader.removeEventListener('click', hideUploadProgressBox);
-    uploadProgressToggle.removeEventListener('click', hideUploadProgressBox);
-    uploadProgressHeader.addEventListener('click', toggleUploadProgressBox); 
-    uploadProgressToggle.addEventListener('click', toggleUploadProgressBox);
-}
-
-function toggleUploadProgressBox() {
-    if (!uploadProgressBox || !uploadProgressToggle || !uploadHeaderText) return;
-    if (!uploadProgressBox.classList.contains('upload-final-state')) {
-        uploadProgressBox.classList.toggle('expanded');
-        uploadProgressToggle.textContent = uploadProgressBox.classList.contains('expanded') ? '▼' : '▲';
-        uploadHeaderText.textContent = uploadProgressBox.classList.contains('expanded') ? 'Upload in corso...' : 'Upload';
+    if (window.websocket_service && typeof window.websocket_service.connect === 'function') {
+        if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Chiamata a window.websocket_service.connect()");
+        window.websocket_service.connect(); 
     } else {
-        hideUploadProgressBox();
+        console.error("AppLogic - ERRORE CRITICO: window.websocket_service.connect non è una funzione.");
+        if(window.showToast) window.showToast("Errore critico: Impossibile inizializzare la comunicazione.", "error", 10000);
+        return; 
+    }
+
+    if (window.requestInitialTreeviewData && typeof window.requestInitialTreeviewData === 'function') {
+        if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Chiamata a window.requestInitialTreeviewData() per caricare gli storages iniziali.");
+        window.requestInitialTreeviewData(); 
+    } else {
+        console.error("AppLogic - ERRORE: window.requestInitialTreeviewData non definita o non è una funzione.");
+    }
+
+    window.app_logic_ready_flag = true;
+    const appLogicReadyEvent = new CustomEvent('appLogicReady');
+    window.dispatchEvent(appLogicReadyEvent);
+    if (config.IsLogLevel(config.LogLevelInfo)) {
+        console.info("AppLogic: Flag 'app_logic_ready_flag' impostato e evento 'appLogicReady' emesso.");
     }
 }
 
-function updateUploadProgressUI(uploadId, fileName, percentage, statusText, filePath, isFinal = false, statusClass = '') {
-    console.log(`[AppLogic] updateUploadProgressUI chiamata per ID: ${uploadId}, File: ${fileName}, %: ${percentage}, Status: ${statusText}`); 
-
-    if (!uploadItemsContainer) {
-        console.error("AppLogic ERRORE: Elemento #upload-items-container non trovato nel DOM per updateUploadProgressUI.");
-        return;
+function attemptCoreServicesInitialization() {
+    if (isWebsocketServiceReadyForApp && isDataServiceReadyForApp) { 
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info("AppLogic: Tutti i servizi (WebSocket & DataService) sono pronti. Inizializzazione dei servizi core e app.");
+        }
+        initializeCoreServicesAndApp(); 
+    } else {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            let waitingFor = [];
+            if (!isWebsocketServiceReadyForApp) waitingFor.push("websocketServiceReady");
+            if (!isDataServiceReadyForApp) waitingFor.push("dataServiceReady");
+            console.info(`AppLogic: In attesa degli eventi: ${waitingFor.join(' e ')}.`);
+        }
     }
-    let uploadItemData = globalUploadItems.get(uploadId);
-    let uploadItemElement = uploadItemData ? uploadItemData.element : null;
+}
 
-    if (!uploadItemElement) {
-        console.log(`[AppLogic] Creazione nuovo elemento upload per ID: ${uploadId}`); 
-        uploadItemElement = document.createElement('div');
-        uploadItemElement.className = 'upload-item';
-        uploadItemElement.dataset.uploadId = uploadId;
-        uploadItemElement.innerHTML = `
-            <div class="upload-item-header">
-                <div class="upload-file-name"></div>
-                <button class="upload-cancel-button">✕</button>
-            </div>
-            <div class="upload-progress-bar-container" title="">
-                <div class="upload-progress-bar">0%</div>
-            </div>
-            <div class="upload-status-text"></div>`;
-        uploadItemsContainer.appendChild(uploadItemElement);
-        globalUploadItems.set(uploadId, { element: uploadItemElement, fileName, percentage, statusText, filePath });
+document.addEventListener('DOMContentLoaded', () => {
+    if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: DOMContentLoaded - Inizializzazione UI statica.");
+    initializeStaticUI(); 
+    attemptCoreServicesInitialization(); 
+});
 
-        const cancelButton = uploadItemElement.querySelector('.upload-cancel-button');
-        if (cancelButton) {
-            cancelButton.addEventListener('click', () => {
-                if (window.confirm(`Sei sicuro di voler annullare l'upload di \"${fileName}\"?`)) {
-                    if (window.cancelUploadFile) { 
-                        window.cancelUploadFile(uploadId);
-                    } else {
-                        console.error("AppLogic - window.cancelUploadFile non è definito.");
+window.addEventListener('websocketServiceReady', () => {
+    if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Evento 'websocketServiceReady' ricevuto.");
+    isWebsocketServiceReadyForApp = true;
+    attemptCoreServicesInitialization(); 
+}, { once: true });
+
+window.addEventListener('dataServiceReady', () => {
+    if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Evento 'dataServiceReady' ricevuto.");
+    isDataServiceReadyForApp = true;
+    attemptCoreServicesInitialization(); 
+}, { once: true });
+
+
+window.app_logic = {
+    initializeAppUI: () => { 
+        if (config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: initializeAppUI chiamata. L'init è gestito da DOMContentLoaded e eventi ready.");
+    },
+    
+    updateWebSocketStatusOnMainPage: (statusType, message) => {
+        console.log(`[[AppLogic DEBUG]] updateWebSocketStatusOnMainPage chiamata con statusType='${statusType}', message='${message}'`);
+        const statusBox = document.getElementById('websocket-status-box');
+        const statusText = document.getElementById('websocket-status-text');
+        if (statusBox && statusText) {
+            console.log(`[[AppLogic DEBUG]] Elementi statusBox e statusText TROVATI. Testo attuale: '${statusText.textContent}'`);
+            statusText.textContent = message || 'N/A';
+            statusBox.className = ''; 
+            statusBox.classList.add('status-' + statusType.replace('ws_', '')); 
+            console.log(`[[AppLogic DEBUG]] statusText.textContent impostato a '${statusText.textContent}'. statusBox.className impostato a '${statusBox.className}'`);
+        } else {
+            console.warn("[[AppLogic DEBUG]] Elementi UI per lo stato WebSocket non trovati durante updateWebSocketStatusOnMainPage.");
+        }
+    },
+
+    addMessageToHistory: (message, type = 'info') => { 
+        const messageList = document.getElementById('message-list');
+        if (!messageList) { if (config.IsLogLevel(config.LogLevelWarning)) console.warn("AppLogic: Elemento #message-list non trovato."); return; }
+        const li = document.createElement('li');
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'message-timestamp';
+        timestampSpan.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        li.appendChild(timestampSpan); li.appendChild(document.createTextNode(" " + message)); 
+        li.className = `log-entry log-${type}`; 
+        messageList.prepend(li);
+        const maxMessages = 50; 
+        while (messageList.children.length > maxMessages) messageList.removeChild(messageList.lastChild);
+    },
+    
+    handleBackendMessage: (message) => { 
+        if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Ricevuto messaggio generico dal backend:", message);
+        if (message.type === 'cache_invalidate_event' && message.payload) {
+            const { storage_name, dir_path, items_per_page, only_directories } = message.payload;
+            if (window.dataService && window.dataService.invalidateCacheForPath) {
+                 if (config.IsLogLevel(config.LogLevelInfo)) console.info(`AppLogic: Ricevuto evento di invalidazione cache per ${storage_name}:${dir_path}`);
+                window.dataService.invalidateCacheForPath(storage_name, dir_path, items_per_page, only_directories);
+            }
+        }
+    },
+    
+    handleConfigUpdate: (payload) => { 
+        if (config.IsLogLevel(config.LogLevelInfo)) console.info("AppLogic: Ricevuto config_update dal server:", payload);
+        if (payload && typeof payload.client_ping_interval_ms === 'number') {
+            if (window.config) { 
+                window.config.clientPingIntervalMs = payload.client_ping_interval_ms;
+                 if (config.IsLogLevel(config.LogLevelInfo)) console.info(`AppLogic: client_ping_interval_ms aggiornato a ${payload.client_ping_interval_ms}ms.`);
+            }
+        }
+    },
+    setCurrentPathGlobal: (storageName, dirPath, storageType) => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info(`AppLogic: setCurrentPathGlobal chiamato con ${storageName}:${dirPath || '/'} (Tipo: ${storageType})`);
+        }
+        const currentPathArea = document.getElementById('current-path-area');
+        if (currentPathArea) {
+            currentPathArea.textContent = `Percorso Corrente: ${storageName}${dirPath ? ':' + dirPath : ''}`;
+        }
+        const createFolderBtn = document.getElementById('create-folder-btn');
+        if (createFolderBtn) {
+            createFolderBtn.style.display = storageName ? 'inline-block' : 'none';
+        }
+
+        if (window.filelist_controller && typeof window.filelist_controller.handlePathChange === 'function') {
+            window.filelist_controller.handlePathChange(storageName, dirPath, storageType);
+        } else if (config.IsLogLevel(config.LogLevelWarning)) {
+            console.warn("AppLogic: filelist_controller.handlePathChange non trovato per notificare cambio path.");
+        }
+    },
+
+    // --- FUNZIONI DI UPLOAD E MODALI (STUB) ---
+    openChunkSizeModalForUpload: (files, storageName, dirPath) => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info("AppLogic: openChunkSizeModalForUpload chiamata con", {filesCount: files ? files.length : 0, storageName, dirPath});
+        }
+        const modal = document.getElementById('chunk-size-modal');
+        const slider = document.getElementById('chunk-size-slider');
+        const display = document.getElementById('chunk-size-display');
+        const parallelSlider = document.getElementById('parallel-chunks-slider');
+        const parallelDisplay = document.getElementById('parallel-chunks-display');
+        const startBtn = document.getElementById('start-upload-btn');
+        const cancelBtn = document.getElementById('cancel-modal-btn');
+
+        if (!modal || !slider || !display || !parallelSlider || !parallelDisplay || !startBtn || !cancelBtn) {
+            console.error("AppLogic: Elementi della modale dimensione chunk non trovati. Fallback a upload diretto.");
+            if (typeof window.app_logic.handleFileUpload === 'function') {
+                window.app_logic.handleFileUpload(files, storageName, dirPath, 4 * 1024 * 1024, 4); // Default
+            } else {
+                 console.error("AppLogic: handleFileUpload non definito per fallback.");
+                 if(window.showToast) window.showToast("Errore: Funzione di upload principale mancante.", "error");
+            }
+            return;
+        }
+        
+        // Logica per aggiornare il display dello slider (esempio)
+        const updateChunkDisplay = () => {
+            const bytes = parseInt(slider.value, 10);
+            if (bytes < 1024) display.textContent = `${bytes} B`;
+            else if (bytes < 1024 * 1024) display.textContent = `${(bytes / 1024).toFixed(1)} KB`;
+            else display.textContent = `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        };
+        slider.oninput = updateChunkDisplay;
+        updateChunkDisplay(); // Inizializza
+
+        const updateParallelDisplay = () => parallelDisplay.textContent = parallelSlider.value;
+        parallelSlider.oninput = updateParallelDisplay;
+        updateParallelDisplay(); // Inizializza
+
+        modal.style.display = 'flex';
+
+        startBtn.onclick = () => {
+            const chunkSize = parseInt(slider.value, 10);
+            const parallelChunks = parseInt(parallelSlider.value, 10);
+            modal.style.display = 'none';
+            if (typeof window.app_logic.handleFileUpload === 'function') {
+                window.app_logic.handleFileUpload(files, storageName, dirPath, chunkSize, parallelChunks);
+            } else {
+                console.error("AppLogic: handleFileUpload non definito dopo conferma modale.");
+                if(window.showToast) window.showToast("Errore: Funzione di upload principale mancante.", "error");
+            }
+        };
+        cancelBtn.onclick = () => modal.style.display = 'none';
+    },
+
+    handleFileUpload: (files, storageName, dirPath, chunkSize, parallelChunks) => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info("AppLogic: handleFileUpload chiamata con:", { filesCount: files ? files.length : 0, storageName, dirPath, chunkSize, parallelChunks });
+        }
+        if (window.showToast) {
+            window.showToast(`Upload per ${files ? files.length : 0} file/s non ancora implementato completamente.`, "warning");
+        }
+        console.warn("AppLogic: Logica di handleFileUpload non implementata completamente.");
+        
+        if (window.addUploadItemToUI && files) { 
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const uploadId = `stub_upload_${Date.now()}_${i}`;
+                window.addUploadItemToUI(uploadId, file.name, file.size);
+                setTimeout(() => {
+                    if(window.updateUploadProgressInUI) window.updateUploadProgressInUI(uploadId, 50, 'uploading');
+                }, 1000);
+                setTimeout(() => {
+                    if(window.updateUploadProgressInUI) window.updateUploadProgressInUI(uploadId, 100, 'complete');
+                    if(window.filelist_controller && window.filelist_controller.refreshCurrentView) {
+                        // window.filelist_controller.refreshCurrentView(); 
                     }
+                }, 2000 + (i * 300)); // Simula upload scaglionati
+            }
+        }
+    },
+
+    openCreateFolderModal: (storageName, dirPath) => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info(`AppLogic: openCreateFolderModal chiamata per ${storageName}:${dirPath || '/'}`);
+        }
+        const modal = document.getElementById('create-folder-modal');
+        const folderNameInput = document.getElementById('new-folder-name');
+        const confirmBtn = document.getElementById('confirm-create-folder-btn');
+        const cancelBtn = document.getElementById('cancel-create-folder-btn');
+
+        if (!modal || !folderNameInput || !confirmBtn || !cancelBtn) {
+            console.error("AppLogic: Elementi della modale 'Crea Cartella' non trovati.");
+            if(window.showToast) window.showToast("Errore: Impossibile aprire la modale per creare una cartella.", "error");
+            return;
+        }
+        folderNameInput.value = '';
+        modal.style.display = 'flex';
+
+        confirmBtn.onclick = () => {
+            const newFolderName = folderNameInput.value.trim();
+            if (!newFolderName) {
+                if(window.showToast) window.showToast("Il nome della cartella non può essere vuoto.", "warning");
+                return;
+            }
+            modal.style.display = 'none';
+            if (config.IsLogLevel(config.LogLevelInfo)) {
+                console.info(`AppLogic: Creazione cartella '${newFolderName}' in ${storageName}:${dirPath || '/'}`);
+            }
+            // QUI: Invia messaggio WebSocket 'create_directory' tramite dataService o websocket_service
+            // Esempio:
+            // window.dataService.createDirectory(storageName, (dirPath ? dirPath + '/' : '') + newFolderName)
+            //  .then(() => { 
+            //      notifyAppLogic(`Cartella '${newFolderName}' creata.`, "success");
+            //      if(window.filelist_controller) window.filelist_controller.refreshCurrentView();
+            //  })
+            //  .catch(err => notifyAppLogic(`Errore creazione cartella: ${err.message || err.error}`, "error"));
+            if(window.showToast) window.showToast(`Funzione 'Crea Cartella' (${newFolderName}) non ancora implementata.`, "info");
+        };
+        cancelBtn.onclick = () => modal.style.display = 'none';
+    },
+
+    confirmDeleteItem: (storageName, itemPath, itemName, isDir) => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info(`AppLogic: confirmDeleteItem chiamata per ${storageName}:${itemPath} (Nome: ${itemName}, Directory: ${isDir})`);
+        }
+        const modal = document.getElementById('delete-confirm-modal');
+        const itemNameSpan = document.getElementById('delete-item-name');
+        const warningMsgSpan = document.getElementById('delete-warning-message'); // Opzionale
+        const confirmBtn = document.getElementById('confirm-delete-btn');
+        const cancelBtn = document.getElementById('cancel-delete-btn');
+
+        if (!modal || !itemNameSpan || !confirmBtn || !cancelBtn) {
+            console.error("AppLogic: Elementi della modale 'Conferma Eliminazione' non trovati.");
+            if(window.showToast) window.showToast("Errore: Impossibile aprire la modale di conferma eliminazione.", "error");
+            return;
+        }
+        
+        itemNameSpan.textContent = `Elemento: ${itemName}`;
+        if (isDir && warningMsgSpan) {
+            warningMsgSpan.textContent = "Sei sicuro di voler eliminare questa cartella e TUTTO il suo contenuto? Questa azione non può essere annullata.";
+        } else if (warningMsgSpan) {
+            warningMsgSpan.textContent = "Sei sicuro di voler eliminare questo file? Questa azione non può essere annullata.";
+        }
+        
+        modal.style.display = 'flex';
+
+        confirmBtn.onclick = () => {
+            modal.style.display = 'none';
+            if (config.IsLogLevel(config.LogLevelInfo)) {
+                console.info(`AppLogic: Eliminazione confermata per ${storageName}:${itemPath}`);
+            }
+            // QUI: Invia messaggio WebSocket 'delete_item' tramite dataService o websocket_service
+            // Esempio:
+            // window.dataService.deleteItem(storageName, itemPath)
+            //  .then(() => { 
+            //      notifyAppLogic(`Elemento '${itemName}' eliminato.`, "success");
+            //      if(window.filelist_controller) window.filelist_controller.refreshCurrentView();
+            //  })
+            //  .catch(err => notifyAppLogic(`Errore eliminazione: ${err.message || err.error}`, "error"));
+            if(window.showToast) window.showToast(`Funzione 'Elimina Elemento' (${itemName}) non ancora implementata.`, "info");
+        };
+        cancelBtn.onclick = () => modal.style.display = 'none';
+    },
+
+    setupModalEventListeners: () => {
+        if (config.IsLogLevel(config.LogLevelInfo)) {
+            console.info("AppLogic: Chiamata a setupModalEventListeners.");
+        }
+        // Questo è un buon posto per aggiungere event listener generici per chiudere le modali
+        // cliccando sull'overlay, o con il tasto ESC, se desiderato.
+        // Esempio per la modale di chunk size (da adattare per le altre):
+        const chunkSizeModal = document.getElementById('chunk-size-modal');
+        if (chunkSizeModal) {
+            chunkSizeModal.addEventListener('click', (event) => {
+                if (event.target === chunkSizeModal) { // Se si clicca sull'overlay stesso
+                    chunkSizeModal.style.display = 'none';
                 }
             });
         }
-    } else {
-         globalUploadItems.get(uploadId).percentage = percentage;
-         globalUploadItems.get(uploadId).statusText = statusText;
-         globalUploadItems.get(uploadId).filePath = filePath;
-    }
-    
-    const fileNameElem = uploadItemElement.querySelector('.upload-file-name');
-    const progressBar = uploadItemElement.querySelector('.upload-progress-bar');
-    const statusTextElem = uploadItemElement.querySelector('.upload-status-text');
-    const progressBarContainer = uploadItemElement.querySelector('.upload-progress-bar-container');
-    const cancelButtonElem = uploadItemElement.querySelector('.upload-cancel-button');
-
-    if (fileNameElem) fileNameElem.textContent = fileName;
-    if (progressBar) {
-        progressBar.style.width = `${percentage}%`;
-        progressBar.textContent = `${percentage.toFixed(0)}%`;
-    }
-    if (statusTextElem) statusTextElem.textContent = statusText;
-    if (progressBarContainer) progressBarContainer.title = filePath;
-
-    uploadItemElement.classList.remove('complete', 'failed', 'cancelled', 'upload-final-state');
-    if (isFinal) {
-        uploadItemElement.classList.add('upload-final-state');
-        if(statusClass) uploadItemElement.classList.add(statusClass);
-        if(cancelButtonElem) cancelButtonElem.style.display = 'none';
-    } else {
-        if(cancelButtonElem) cancelButtonElem.style.display = 'block';
-    }
-    
-    if (uploadProgressBox) { 
-        const computedStyle = window.getComputedStyle(uploadProgressBox);
-        if (computedStyle.display === 'none') {
-            console.log("[AppLogic] uploadProgressBox è nascosto (computedStyle), chiamo showUploadProgressBox()");
-            showUploadProgressBox();
+        // Aggiungi logica simile per 'create-folder-modal' e 'delete-confirm-modal'
+        const createFolderModal = document.getElementById('create-folder-modal');
+        if (createFolderModal) {
+            createFolderModal.addEventListener('click', (event) => {
+                if (event.target === createFolderModal) createFolderModal.style.display = 'none';
+            });
         }
-    } else {
-        console.error("[AppLogic] uploadProgressBox non trovato nel DOM durante updateUploadProgressUI.");
-    }
-
-    checkOverallUploadStatus(); 
-}
-window.updateGlobalUploadProgress = updateUploadProgressUI;
-
-
-function checkOverallUploadStatus() {
-    if (!uploadProgressBox || !uploadProgressToggle || !uploadHeaderText || !uploadProgressHeader) return;
-    let allFinal = true;
-    let anyFailed = false;
-    let anyInProgress = false;
-
-    if (globalUploadItems.size === 0) {
-        console.log("[AppLogic] checkOverallUploadStatus: Nessun item, chiamo hideUploadProgressBox()"); 
-        hideUploadProgressBox();
-        return;
-    }
-
-    globalUploadItems.forEach(item => {
-        if (!item.element.classList.contains('upload-final-state')) {
-            allFinal = false;
-            anyInProgress = true; 
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        if (deleteConfirmModal) {
+            deleteConfirmModal.addEventListener('click', (event) => {
+                if (event.target === deleteConfirmModal) deleteConfirmModal.style.display = 'none';
+            });
         }
-        if (item.element.classList.contains('failed')) {
-            anyFailed = true;
-        }
-    });
-
-    if (allFinal) {
-        uploadProgressBox.classList.add('upload-final-state');
-        uploadProgressToggle.textContent = '✕';
-        uploadHeaderText.textContent = anyFailed ? 'Upload(s) Fallito/i' : 'Upload(s) Completato/i';
-        uploadProgressHeader.removeEventListener('click', toggleUploadProgressBox);
-        uploadProgressToggle.removeEventListener('click', toggleUploadProgressBox);
-        uploadProgressHeader.addEventListener('click', hideUploadProgressBox);
-        uploadProgressToggle.addEventListener('click', hideUploadProgressBox);
-    } else {
-        uploadProgressBox.classList.remove('upload-final-state');
-        uploadProgressToggle.textContent = uploadProgressBox.classList.contains('expanded') ? '▼' : '▲';
-        if (anyInProgress) { 
-            uploadHeaderText.textContent = 'Upload in corso...';
-        } else {
-            uploadHeaderText.textContent = 'Upload';
-        }
-        uploadProgressHeader.removeEventListener('click', hideUploadProgressBox);
-        uploadProgressToggle.removeEventListener('click', hideUploadProgressBox);
-        uploadProgressHeader.addEventListener('click', toggleUploadProgressBox);
-        uploadProgressToggle.addEventListener('click', toggleUploadProgressBox);
-    }
-}
-
-
-// --- Modals ---
-function formatBytesForDisplay(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1))} ${sizes[i]}`;
-}
-
-function showChunkSizeModal(files) {
-    if(!chunkSizeModal || !chunkSizeSlider || !chunkSizeDisplay || !parallelChunksSlider || !parallelChunksDisplay) return;
-    filesToUploadGlobally = files; 
-    const firstFileSize = files.length > 0 ? files[0].size : 1024 * 1024 * 10; 
-    chunkSizeSlider.max = firstFileSize > 0 ? firstFileSize : 1024 * 1024 * 10;
-    chunkSizeSlider.value = Math.min(globalSelectedChunkSize, parseInt(chunkSizeSlider.max,10) );
-    chunkSizeDisplay.textContent = formatBytesForDisplay(parseInt(chunkSizeSlider.value, 10));
-    parallelChunksSlider.value = globalSelectedParallelChunks;
-    parallelChunksDisplay.textContent = globalSelectedParallelChunks;
-    chunkSizeModal.style.display = 'flex';
-}
-window.showGlobalChunkSizeModal = showChunkSizeModal;
-
-function hideChunkSizeModal() {
-    if(chunkSizeModal) chunkSizeModal.style.display = 'none';
-}
-
-function handleStartUploadConfirm() {
-    if(!chunkSizeSlider || !parallelChunksSlider) return;
-    globalSelectedChunkSize = parseInt(chunkSizeSlider.value, 10);
-    globalSelectedParallelChunks = parseInt(parallelChunksSlider.value, 10);
-    hideChunkSizeModal();
-    if (window.initiateFileUploads) { 
-        window.initiateFileUploads(filesToUploadGlobally, globalSelectedChunkSize, globalSelectedParallelChunks);
-    } else {
-        console.error("AppLogic - window.initiateFileUploads non è definito.");
-    }
-    filesToUploadGlobally = [];
-}
-
-function showCreateFolderModal() {
-    if(!createFolderModal || !newFolderNameInput) return;
-    newFolderNameInput.value = '';
-    createFolderModal.style.display = 'flex';
-    newFolderNameInput.focus();
-}
-window.showGlobalCreateFolderModal = showCreateFolderModal;
-
-function hideCreateFolderModal() {
-    if(createFolderModal) createFolderModal.style.display = 'none';
-}
-
-function handleCreateFolderConfirm() {
-    if(!newFolderNameInput) return;
-    const folderName = newFolderNameInput.value.trim();
-    if (folderName) {
-        hideCreateFolderModal();
-        if (window.requestCreateDirectory) { 
-            window.requestCreateDirectory(currentSelectedStorageName, currentSelectedDirPath, folderName);
-        } else {
-            console.error("AppLogic - window.requestCreateDirectory non è definito.");
-        }
-    } else {
-        if (window.showToast) window.showToast('Il nome della cartella non può essere vuoto.', 'warning');
-    }
-}
-
-function showDeleteConfirmModal(itemDetails) {
-    if(!deleteConfirmModal || !deleteItemNameElement || !deleteWarningMessageElement) return;
-    globalItemToDelete = itemDetails;
-    deleteItemNameElement.textContent = `Elemento: \"${itemDetails.itemName}\"`;
-    deleteWarningMessageElement.textContent = itemDetails.warningMessage || "Sei sicuro di voler eliminare questo elemento? Questa azione non può essere annullata.";
-    deleteConfirmModal.style.display = 'flex';
-}
-window.showGlobalDeleteConfirmModal = showDeleteConfirmModal;
-
-function hideDeleteConfirmModal() {
-    if(deleteConfirmModal) deleteConfirmModal.style.display = 'none';
-    globalItemToDelete = null;
-}
-
-function handleDeleteItemConfirm() {
-    if (globalItemToDelete) {
-        const itemToProcess = { ...globalItemToDelete }; 
-        hideDeleteConfirmModal(); 
-        if (window.requestDeleteItem) { 
-            window.requestDeleteItem(itemToProcess.storageName, itemToProcess.itemPath, itemToProcess.itemName);
-        } else {
-            console.error("AppLogic - window.requestDeleteItem non è definito.");
-        }
-    }
-}
-
-// --- Loading Spinner (Filelist specific) ---
-function showFilelistLoadingSpinner() {
-    if (filelistLoadingOverlay) filelistLoadingOverlay.style.display = 'flex';
-}
-window.showFilelistLoadingSpinner = showFilelistLoadingSpinner; 
-
-function hideFilelistLoadingSpinner() {
-    if (filelistLoadingOverlay) filelistLoadingOverlay.style.display = 'none';
-}
-window.hideFilelistLoadingSpinner = hideFilelistLoadingSpinner; 
-
-
-// --- WebSocket Status UI ---
-function updateWebSocketStatusUI(status, message) {
-    if (!websocketStatusBox || !websocketStatusText) {
-        console.warn('AppLogic - UI elements for WebSocket status not found.');
-        return;
-    }
-    websocketStatusText.textContent = message;
-    websocketStatusBox.classList.remove('status-green', 'status-red', 'status-yellow', 'status-grey');
-    switch (status) {
-        case 'ws_established':
-            websocketStatusBox.classList.add('status-green');
-            break;
-        case 'lp_fallback':
-        case 'ws_error':
-            websocketStatusBox.classList.add('status-red');
-            break;
-        case 'ws_connecting':
-            websocketStatusBox.classList.add('status-yellow');
-            break;
-        default: 
-            websocketStatusBox.classList.add('status-grey'); 
-            break;
-    }
-}
-window.updateWebSocketStatusOnMainPage = updateWebSocketStatusUI;
-
-
-// --- Main Communication Handlers ---
-function handleTreeviewSelect(storageName, itemPath, storageType) {
-    console.log(`AppLogic - Treeview selection: Storage=${storageName}, Path=${itemPath || 'root'}, Type=${storageType}`);
-    addMessageToHistory(`Navigato a: ${storageName}${itemPath ? '/' + itemPath : '/'}`);
-    currentSelectedStorageName = storageName;
-    currentSelectedDirPath = itemPath;
-
-    if(createFolderBtn) {
-        if (storageType === 'local' || storageType === 'azure-blob') {
-            createFolderBtn.style.display = 'inline-block';
-            createFolderBtn.disabled = false;
-        } else {
-            createFolderBtn.style.display = 'none';
-        }
-    }
-
-    if (window.loadFilelistForPath) { 
-        window.loadFilelistForPath(storageName, itemPath);
-    } else {
-        console.error("AppLogic - window.loadFilelistForPath non è definito.");
-    }
-}
-window.handleTreeviewSelect = handleTreeviewSelect; 
-
-// Centralized backend message handler
-window.handleBackendMessage = (message) => {
-    console.log('AppLogic - Backend message received:', message);
-    if (window.addMessageToHistory) {
-        addMessageToHistory(`Backend: ${message.type} (ID: ${message.request_id || 'N/A'})`);
-    }
-
-    if (message.type === 'list_directory_response') {
-        if (window.handleTreeviewBackendResponse) { 
-            window.handleTreeviewBackendResponse(message);
-        }
-        // *** MODIFICA PER DEBUG ***
-        console.log('[AppLogic] Prima di chiamare window.handleFilelistBackendResponse. Tipo:', typeof window.handleFilelistBackendResponse);
-        if (typeof window.handleFilelistBackendResponse === 'function') { // Verifica più robusta
-            try {
-                window.handleFilelistBackendResponse(message);
-            } catch (e) {
-                console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse:', e);
-            }
-        } else {
-            console.error('[AppLogic] window.handleFilelistBackendResponse NON è definito o non è una funzione!');
-        }
-        // *** FINE MODIFICA PER DEBUG ***
-    } else if (message.type === 'get_filesystems_response') { 
-        if (window.handleTreeviewBackendResponse) { 
-            window.handleTreeviewBackendResponse(message);
-        }
-    } else if (message.type === 'create_directory_response' ||
-               message.type === 'delete_item_response' ||
-               message.type === 'check_directory_contents_request_response') { 
-        // Ensure filelist controller handles these if it's defined
-        if (typeof window.handleFilelistBackendResponse === 'function') {
-            try {
-                window.handleFilelistBackendResponse(message);
-            } catch (e) {
-                console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse per create/delete/check:', e);
-            }
-        } else {
-             console.warn('[AppLogic] window.handleFilelistBackendResponse non definito per create/delete/check.');
-        }
-    } else if (message.type === 'pong') {
-        if (window.handlePongMessage) { 
-            window.handlePongMessage(message);
-        }
-    } else if (message.type === 'config_update') {
-        if (window.handleConfigUpdate) { 
-             window.handleConfigUpdate(message);
-        }
-    } else if (message.type === 'error') {
-        console.error('AppLogic - Backend error:', message.payload ? message.payload.error : 'Errore sconosciuto');
-        if (window.showToast) { 
-            window.showToast(`Errore dal Backend: ${message.payload ? message.payload.error : 'Errore sconosciuto'}`, 'error');
-        }
-        if (window.handleTreeviewBackendResponse) { 
-            window.handleTreeviewBackendResponse(message); 
-        }
-        // Ensure filelist controller handles errors if it's defined
-        if (typeof window.handleFilelistBackendResponse === 'function') {
-            try {
-                window.handleFilelistBackendResponse(message); 
-            } catch (e) {
-                 console.error('[AppLogic] Errore durante la chiamata a window.handleFilelistBackendResponse per errore backend:', e);
-            }
-        } else {
-            console.warn('[AppLogic] window.handleFilelistBackendResponse non definito per errore backend.');
-        }
-        
-        let isErrorHandledByController = false;
-        if (message.request_id) {
-            if (document.querySelector(`li[data-pending-request-id=\"${message.request_id}\"]`)) {
-                // Gestito da treeview_controller (o almeno dovrebbe)
-            }
-            if (window.lastFilelistRequestId === message.request_id) {
-                isErrorHandledByController = true;
-            }
-        }
-        if (!isErrorHandledByController && window.hideFilelistLoadingSpinner) {
-            window.hideFilelistLoadingSpinner();
-        }
-    } else {
-        console.warn(`AppLogic - Unhandled backend message type: ${message.type}`, message);
     }
 };
 
-// --- Load Event ---
-window.addEventListener('load', initializeAppUI);
-
-console.log('app_logic.js loaded'); // Log finale del file
+if (window.config && config.IsLogLevel && config.IsLogLevel(config.LogLevelInfo)) {
+    console.info("app_logic.js caricato e window.app_logic definito.");
+}
+// L'evento 'appLogicReady' viene emesso da initializeCoreServicesAndApp

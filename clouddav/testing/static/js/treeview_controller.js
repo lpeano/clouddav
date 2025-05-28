@@ -1,309 +1,228 @@
-// static/js/treeview_controller.js
-// Manages the treeview logic.
+// Si assume che window.config sia definito globalmente.
+// Questo script attenderà che window.dataService e window.app_logic siano pronti.
 
-(function() {
+// --------------- treeview_controller.js ---------------
+(() => {
+    if (window.config && config.IsLogLevel(config.LogLevelInfo)) {
+        console.info("--- PARSING treeview_controller.js ---");
+    }
+
     const treeviewRoot = document.getElementById('treeview-root');
     let selectedTreeviewElement = null;
-    const lastRequestIds = new Map(); // Map<pathKey, requestID>
+    
+    let isDataServiceReadyForTreeview = (window.data_service_ready_flag && typeof window.dataService === 'object' && window.dataService !== null) || false;
+    // Non fare affidamento solo sul flag per app_logic qui, lo controlleremo al momento dell'uso
+    // let isAppLogicReadyForTreeview = window.app_logic_ready_flag || false; 
 
-    function notifyAppLogic(message, type = 'info') {
-        if (window.addMessageToHistory) {
-            window.addMessageToHistory(`Treeview: ${message}`, type);
+    function notify(message, type = 'info') {
+        const localAppLogicReady = (window.app_logic_ready_flag && typeof window.app_logic === 'object' && window.app_logic !== null);
+        if (localAppLogicReady && window.app_logic.addMessageToHistory) {
+            window.app_logic.addMessageToHistory(`Treeview: ${message}`, type);
         }
-        if (window.showToast && (type === 'error' || type === 'warning')) {
+        if (window.showToast && typeof window.showToast === 'function') {
             window.showToast(`Treeview: ${message}`, type);
+        } else if (window.config && config.IsLogLevel(config.LogLevelDebug)){
+             // console.debug("TreeviewCtrl: window.showToast non definito per notifica.");
+        }
+    }
+    
+    if (!isDataServiceReadyForTreeview) {
+        window.addEventListener('dataServiceReady', () => {
+            if (window.config && config.IsLogLevel(config.LogLevelInfo)) console.info("TreeviewCtrl: Evento 'dataServiceReady' ricevuto.");
+            if (typeof window.dataService === 'object' && window.dataService !== null) {
+                isDataServiceReadyForTreeview = true;
+            } else {
+                console.error("TreeviewCtrl: Evento 'dataServiceReady' ricevuto, MA window.dataService NON è un oggetto valido!");
+            }
+            attemptTreeviewInitialization(); // Ritenta l'init del treeview se necessario
+        }, { once: true });
+    }
+    
+    // Non è più necessario un listener separato per appLogicReady qui se controlliamo al momento dell'uso.
+    // app_logic.js dovrebbe chiamare requestInitialTreeviewData quando TUTTO è pronto.
+
+    function initializeTreeviewController() {
+        if (window.config && config.IsLogLevel(config.LogLevelInfo)) {
+            console.info("TreeviewCtrl: Dipendenze pronte. TreeviewController inizializzato (o pronto per essere usato).");
         }
     }
 
-    window.handleTreeviewBackendResponse = (message) => {
-        console.log('TreeviewCtrl - Backend message received:', message);
-        const { type, payload, request_id: messageRequestId } = message;
+    function attemptTreeviewInitialization() {
+        const dataServiceActuallyReady = (window.data_service_ready_flag && typeof window.dataService === 'object' && window.dataService !== null);
+        if (dataServiceActuallyReady) isDataServiceReadyForTreeview = true;
 
-        if (type === 'get_filesystems_response') {
-            if (payload && Array.isArray(payload)) {
-                renderStorages(payload);
-                notifyAppLogic('Elenco storage ricevuto.');
-            } else {
-                console.error('TreeviewCtrl - Invalid get_filesystems_response payload:', payload);
-                notifyAppLogic('Errore nel caricare elenco storage: dati non validi.', 'error');
-            }
-            return;
-        }
-
-        if (!messageRequestId) {
-            console.warn(`TreeviewCtrl - Message type ${type} received without request_id. Ignoring.`);
-            return;
-        }
-
-        let pathKeyForThisResponse = null;
-        let responseStorageName = null;
-        let responseDirPath = null;
-        let targetElementForErrorCleanup = null;
-
-        if (type === 'list_directory_response') {
-            if (payload && typeof payload.storage_name === 'string' && typeof payload.dir_path === 'string') {
-                responseStorageName = payload.storage_name;
-                responseDirPath = payload.dir_path; // Può essere stringa vuota per la root
-                pathKeyForThisResponse = `${responseStorageName}:${responseDirPath}`;
-            } else {
-                console.error(`TreeviewCtrl - list_directory_response (ID: ${messageRequestId}) MISSING storage_name or dir_path in payload. Payload received:`, JSON.stringify(payload));
-                lastRequestIds.forEach((reqId, pk) => {
-                    if (reqId === messageRequestId) {
-                        pathKeyForThisResponse = pk;
-                        const parts = pk.split(':');
-                        responseStorageName = parts[0];
-                        responseDirPath = parts.slice(1).join(':');
-                        console.warn(`TreeviewCtrl - Fallback: Found pathKey \"${pathKeyForThisResponse}\" for ID ${messageRequestId} by searching map.`);
-                    }
-                });
-                if (!pathKeyForThisResponse) {
-                    notifyAppLogic(`Risposta directory (ID: ${messageRequestId}) ricevuta senza informazioni di percorso sufficienti. Impossibile elaborare.`, 'error');
-                    return;
-                }
-            }
-        } else if (type === 'error') {
-            lastRequestIds.forEach((reqId, pk) => {
-                if (reqId === messageRequestId) {
-                    pathKeyForThisResponse = pk;
-                    const parts = pk.split(':');
-                    responseStorageName = parts[0];
-                    responseDirPath = parts.slice(1).join(':');
-                }
-            });
-            if (!pathKeyForThisResponse) {
-                console.warn(`TreeviewCtrl - Error message (ID: ${messageRequestId}) received, but no pending request found for this ID in lastRequestIds. Error:`, payload ? payload.error : "Unknown error");
-                const orphanedElement = document.querySelector(`li[data-pending-request-id=\"${messageRequestId}\"]`);
-                if (orphanedElement) orphanedElement.removeAttribute('data-pending-request-id');
-                return;
-            }
+        // L'inizializzazione del treeview stesso (es. caricamento dati iniziali)
+        // è ora guidata da app_logic.js che chiama window.requestInitialTreeviewData.
+        // Questa funzione serve più a confermare che le dipendenze sono pronte per quando
+        // le funzioni del treeview verranno chiamate.
+        if (isDataServiceReadyForTreeview) {
+            initializeTreeviewController();
         } else {
-            console.warn(`TreeviewCtrl - Unhandled message type ${type} with request_id ${messageRequestId}. Ignoring.`);
-            return;
+            if (window.config && config.IsLogLevel(config.LogLevelDebug)) {
+                console.debug(`TreeviewCtrl: In attesa di dataService. Pronto: ${isDataServiceReadyForTreeview}`);
+            }
+        }
+    }
+    
+    attemptTreeviewInitialization(); // Chiamata iniziale
+
+
+    window.requestInitialTreeviewData = async function() { 
+        if (window.config && config.IsLogLevel(config.LogLevelInfo)) console.info("TreeviewCtrl: Chiamata a requestInitialTreeviewData.");
+
+        if (!isDataServiceReadyForTreeview || !window.dataService || typeof window.dataService.fetchFileSystems !== 'function') {
+            const errorMsg = `TreeviewCtrl - ERRORE CRITICO: dataService (pronto: ${isDataServiceReadyForTreeview}, obj: ${!!window.dataService}) o dataService.fetchFileSystems non disponibile.`;
+            console.error(errorMsg);
+            notify("Errore: Servizio dati non pronto per caricare gli storage.", "error");
+            return; 
         }
 
-        const latestExpectedRequestIdForPath = lastRequestIds.get(pathKeyForThisResponse);
-
-        if (latestExpectedRequestIdForPath !== messageRequestId) {
-            console.warn(`TreeviewCtrl - Response for ID ${messageRequestId} (path: ${pathKeyForThisResponse}) is NOT the latest expected ID (${latestExpectedRequestIdForPath || 'none'}) for this path. Ignoring as obsolete.`);
-            return;
-        }
-
-        const targetElement = document.querySelector(`li[data-storage-name=\"${responseStorageName}\"][data-path=\"${responseDirPath}\"]`);
-
-        if (!targetElement) {
-            console.warn(`TreeviewCtrl - Target DOM element for path ${pathKeyForThisResponse} not found, though response ID ${messageRequestId} was expected. Tree might have been re-rendered. Cleaning up request ID from map.`);
-            lastRequestIds.delete(pathKeyForThisResponse);
-            return;
-        }
-        targetElementForErrorCleanup = targetElement;
-
-        if (type === 'list_directory_response') {
-            if (payload && Array.isArray(payload.items)) {
-                renderDirectoryContent(targetElement, payload.items);
-                notifyAppLogic(`Contenuto directory \"${responseDirPath || responseStorageName || '/'}\" caricato.`);
+        try {
+            if (window.config && config.IsLogLevel(config.LogLevelDebug)) console.debug("TreeviewCtrl: Chiamata a dataService.fetchFileSystems()");
+            const storagesPayload = await window.dataService.fetchFileSystems(); 
+            if (storagesPayload && Array.isArray(storagesPayload)) { 
+                renderStorages(storagesPayload);
+                notify("Elenco storage caricato.");
             } else {
-                console.error('TreeviewCtrl - Invalid list_directory_response payload items (after pathKey check):', payload);
-                notifyAppLogic('Errore nel caricare contenuto directory: dati non validi.', 'error');
-                targetElement.classList.remove('open');
-                const ul = targetElement.querySelector('ul');
-                if (ul) ul.innerHTML = '';
+                console.error("TreeviewCtrl: Payload da dataService.fetchFileSystems non è un array:", storagesPayload);
+                notify("Errore formato dati storages da dataService.", "error");
             }
-        } else if (type === 'error') {
-            console.error(`TreeviewCtrl - Error from backend for path ${pathKeyForThisResponse} (Req ID: ${messageRequestId}):`, payload.error);
-            notifyAppLogic(`Errore caricamento directory ${pathKeyForThisResponse}: ${payload.error}`, 'error');
-            if (targetElementForErrorCleanup) {
-                targetElementForErrorCleanup.classList.remove('open');
-                const ul = targetElementForErrorCleanup.querySelector('ul');
-                if (ul) ul.innerHTML = '';
-            }
-        }
-
-        lastRequestIds.delete(pathKeyForThisResponse);
-    };
-
-    window.requestInitialTreeviewData = () => {
-        notifyAppLogic('Richiesta elenco storage...');
-        if (window.sendMessage) {
-            window.sendMessage({ type: 'get_filesystems' });
-        } else {
-            console.error('TreeviewCtrl - sendMessage function is not available.');
-            notifyAppLogic('Errore: Funzione sendMessage non disponibile.', 'error');
+        } catch (errorPayload) {
+            console.error("TreeviewCtrl: Errore da dataService.fetchFileSystems:", errorPayload);
+            let errMsg = "Errore sconosciuto";
+            if (errorPayload && errorPayload.message) errMsg = errorPayload.message;
+            else if (errorPayload && errorPayload.error) errMsg = errorPayload.error;
+            notify(`Errore caricamento storages: ${errMsg}`, "error");
         }
     };
 
     function renderStorages(storages) {
-        if (!treeviewRoot) {
-            console.error("TreeviewCtrl - treeviewRoot element not found in DOM.");
-            return;
-        }
-        treeviewRoot.innerHTML = '';
-        if (!Array.isArray(storages)) {
-            console.error('TreeviewCtrl - storages argument is not an array:', storages);
-            notifyAppLogic('Errore nel rendering storage: dati non validi.', 'error');
-            return;
-        }
+        if (!treeviewRoot) { console.error("TreeviewCtrl: Elemento treeview-root non trovato."); return; }
+        treeviewRoot.innerHTML = ''; 
+        if (!Array.isArray(storages)) { console.error("TreeviewCtrl: renderStorages si aspetta un array.", storages); return; }
         storages.forEach(storageCfg => {
             const li = document.createElement('li');
-            li.classList.add('directory');
+            li.classList.add('directory'); 
             li.textContent = storageCfg.name;
-            li.dataset.storageName = storageCfg.name;
-            li.dataset.path = '';
-            li.dataset.storageType = storageCfg.type;
+            li.dataset.storageName = storageCfg.name; li.dataset.path = ''; 
+            li.dataset.storageType = storageCfg.type; li.dataset.isDir = "true"; 
             li.addEventListener('click', handleTreeviewItemClick);
-
-            const ul = document.createElement('ul');
-            li.appendChild(ul);
+            const ul = document.createElement('ul'); li.appendChild(ul);
             treeviewRoot.appendChild(li);
         });
     }
 
-    function handleTreeviewItemClick(event) {
+    async function handleTreeviewItemClick(event) {
         event.stopPropagation();
-        const clickedElement = event.currentTarget;
+        const clickedElement = event.currentTarget; 
 
-        if (selectedTreeviewElement) {
-            selectedTreeviewElement.classList.remove('selected');
-        }
+        if (selectedTreeviewElement) selectedTreeviewElement.classList.remove('selected');
         clickedElement.classList.add('selected');
         selectedTreeviewElement = clickedElement;
 
         const storageName = clickedElement.dataset.storageName;
         const itemPath = clickedElement.dataset.path;
-        const storageType = clickedElement.dataset.storageType;
-        const isDirectory = clickedElement.classList.contains('directory'); // Controlla se è una directory
+        const storageType = clickedElement.dataset.storageType; 
+        const isDir = clickedElement.dataset.isDir === "true";
 
-        // Notifica sempre la selezione, sia per file che per directory
-        if (window.handleTreeviewSelect) {
-            window.handleTreeviewSelect(storageName, itemPath, storageType);
+        if (window.config && config.IsLogLevel(config.LogLevelDebug)) {
+            console.debug(`TreeviewCtrl: Click su ${isDir ? 'directory' : 'file'}: ${storageName}:${itemPath || '/'}`);
+            console.debug("TreeviewCtrl (handleTreeviewItemClick): Verifico window.app_logic:", window.app_logic);
+            if(window.app_logic) {
+                console.debug("TreeviewCtrl (handleTreeviewItemClick): Verifico typeof window.app_logic.setCurrentPathGlobal:", typeof window.app_logic.setCurrentPathGlobal);
+            }
         }
 
-        // Espandi/comprimi solo se è una directory
-        if (isDirectory) {
-            if (event.target === clickedElement || clickedElement.contains(event.target)) {
-                 toggleDirectory(clickedElement);
-            }
+        // CONTROLLO ROBUSTO AL MOMENTO DELL'USO
+        if (window.app_logic && typeof window.app_logic.setCurrentPathGlobal === 'function') { 
+            window.app_logic.setCurrentPathGlobal(storageName, itemPath, storageType);
+        } else {
+            console.warn(`TreeviewCtrl: window.app_logic.setCurrentPathGlobal non disponibile al momento del click. app_logic:`, window.app_logic);
+            notify("Errore: Impossibile notificare cambio percorso all'applicazione principale.", "warning");
+        }
+
+        if (isDir) {
+            toggleDirectory(clickedElement, storageName, itemPath, storageType);
         }
     }
 
-    function toggleDirectory(directoryElement) {
-        const isOpen = directoryElement.classList.contains('open');
+    async function toggleDirectory(directoryElement, storageName, dirPath, storageType) {
+        const isOpen = directoryElement.classList.toggle('open');
         const ul = directoryElement.querySelector('ul');
+        if (!ul) { console.error("TreeviewCtrl: Elemento <ul> mancante per la directory:", directoryElement); return; }
 
-        if (!ul) {
-            console.error("TreeviewCtrl - Elemento ul mancante per la directory:", directoryElement);
-            return;
-        }
-
-        if (isOpen) {
-            directoryElement.classList.remove('open');
-            // Non è necessario pulire ul.innerHTML qui,
-            // perché le regole CSS si occuperanno di nascondere l'ul.
-            return;
-        }
-
-        directoryElement.classList.add('open');
-
-        let hasChildElements = false;
-        for (let i = 0; i < ul.childNodes.length; i++) {
-            if (ul.childNodes[i].nodeType === Node.ELEMENT_NODE) {
-                hasChildElements = true;
-                break;
-            }
-        }
-
-        if (!hasChildElements) {
-            const storageName = directoryElement.dataset.storageName;
-            const itemPath = directoryElement.dataset.path;
-            const pathKey = `${storageName}:${itemPath}`;
-
-            if (lastRequestIds.has(pathKey)) {
-                console.log(`TreeviewCtrl - Richiesta per il percorso ${pathKey} (ID: ${lastRequestIds.get(pathKey)}) è già considerata in corso. Ignorata nuova richiesta.`);
+        if (isOpen && ul.children.length === 0) { 
+            if (window.config && config.IsLogLevel(config.LogLevelInfo)) console.info(`TreeviewCtrl: Espansione directory ${storageName}:${dirPath || '/'}. Caricamento contenuto...`);
+            notify(`Caricamento contenuto di ${dirPath || storageName}...`);
+            
+            // CONTROLLO ROBUSTO AL MOMENTO DELL'USO
+            if (!isDataServiceReadyForTreeview || !window.dataService || typeof window.dataService.fetchPage !== 'function') {
+                console.error(`TreeviewCtrl - ERRORE CRITICO in toggleDirectory: dataService (pronto flag: ${isDataServiceReadyForTreeview}, obj: ${!!window.dataService}) o dataService.fetchPage non disponibile.`);
+                if(window.config && config.IsLogLevel(config.LogLevelDebug)){
+                    console.debug("TreeviewCtrl (toggleDirectory): Stato di window.data_service_ready_flag:", window.data_service_ready_flag);
+                    console.debug("TreeviewCtrl (toggleDirectory): Stato di window.dataService:", window.dataService);
+                    if(window.dataService) console.debug("TreeviewCtrl (toggleDirectory): Tipo di window.dataService.fetchPage:", typeof window.dataService.fetchPage);
+                }
+                notify("Errore: Servizio dati non pronto per caricare contenuto directory.", "error");
+                directoryElement.classList.remove('open'); 
                 return;
             }
 
-            notifyAppLogic(`Richiesta contenuto directory per \"${itemPath || storageName || '/'}\"...`);
-            if (window.sendMessage) {
-                const requestID = window.sendMessage({
-                    type: 'list_directory',
-                    payload: {
-                        storage_name: storageName,
-                        dir_path: itemPath,
-                        page: 1, // Per il treeview, probabilmente vorrai sempre la prima pagina
-                        items_per_page: 1000, // Un numero grande per ottenere tutte le sottodirectory
-                                          // Se il backend ora pagina correttamente solo le directory,
-                                          // questo potrebbe essere rivisto.
-                        name_filter: '',       // Solitamente non si filtra per nome nel treeview
-                        timestamp_filter: '',  // Solitamente non si filtra per data nel treeview
-                        only_directories: true // << MODIFICA: Richiedi solo directory
-                    }
-                });
-                lastRequestIds.set(pathKey, requestID);
-            } else {
-                 console.error('TreeviewCtrl - sendMessage function is not available for list_directory.');
-                 notifyAppLogic('Errore: Funzione sendMessage non disponibile.', 'error');
-                 directoryElement.classList.remove('open');
+            try {
+                const itemsPerPageForTree = 1000; 
+                const options = { onlyDirectories: true }; 
+                const payload = await window.dataService.fetchPage(storageName, dirPath, 1, itemsPerPageForTree, options);
+                if (payload && payload.items) {
+                    renderDirectoryContents(ul, payload.items, storageName, storageType);
+                    if (payload.items.length === 0 && window.config && config.IsLogLevel(config.LogLevelInfo)) console.info(`TreeviewCtrl: La directory ${storageName}:${dirPath || '/'} è vuota.`);
+                } else { throw new Error("Payload non valido o items mancanti dalla risposta del dataService."); }
+            } catch (error) {
+                console.error(`TreeviewCtrl: Errore caricamento contenuto directory ${storageName}:${dirPath || '/'}:`, error);
+                let errorMessage = "Errore sconosciuto";
+                if (error && error.message) errorMessage = error.message;
+                else if (error && error.error) errorMessage = error.error; 
+                notify(`Errore caricamento ${dirPath || storageName}: ${errorMessage}`, 'error');
+                directoryElement.classList.remove('open'); 
+                ul.innerHTML = `<li>Errore caricamento: ${errorMessage}</li>`;
             }
+        } else if (!isOpen) {
+            if (window.config && config.IsLogLevel(config.LogLevelDebug)) console.debug(`TreeviewCtrl: Compressione directory ${storageName}:${dirPath || '/'}.`);
         }
     }
 
-    function renderDirectoryContent(directoryElement, items) {
-        const ul = directoryElement.querySelector('ul');
-        if (!ul) {
-            console.error("TreeviewCtrl - Cannot render content, ul not found for:", directoryElement);
-            return;
-        }
-        ul.innerHTML = '';
-
-        const storageName = directoryElement.dataset.storageName;
-        const storageType = directoryElement.dataset.storageType;
-
-        // Ordina solo per nome, dato che tutti gli items dovrebbero essere directory
-        items.sort((a, b) => a.name.localeCompare(b.name));
-
+    function renderDirectoryContents(parentElementUL, items, currentStorageName, currentStorageType) {
+        parentElementUL.innerHTML = ''; 
+        if (!Array.isArray(items)) { console.error("TreeviewCtrl: renderDirectoryContents si aspetta un array.", items); return; }
+        items.sort((a, b) => { 
+            if (a.is_dir && !b.is_dir) return -1; if (!a.is_dir && b.is_dir) return 1;
+            return a.name.localeCompare(b.name);
+        });
         items.forEach(item => {
-            // Se il backend invia solo directory, item.is_dir dovrebbe essere sempre true.
-            // Aggiungiamo un controllo per sicurezza o se il backend potesse inviare misto in altri scenari.
-            if (!item.is_dir) { // Non dovrebbe accadere se only_directories:true funziona
-                console.warn(`TreeviewCtrl: Ricevuto un file (${item.name}) quando ci si aspettavano solo directory.`);
-                return;
-            }
-
             const li = document.createElement('li');
             li.textContent = item.name;
-            li.dataset.storageName = storageName;
-            li.dataset.path = item.path;
-            li.dataset.storageType = storageType; // Potrebbe non essere più necessario se solo dir
-            
-            li.classList.add('directory'); // Tutti gli item sono directory
-            const childUl = document.createElement('ul');
-            li.appendChild(childUl);
-            
+            li.dataset.storageName = currentStorageName; li.dataset.path = item.path; 
+            li.dataset.storageType = currentStorageType; li.dataset.isDir = item.is_dir.toString();
+            if (item.is_dir) {
+                li.classList.add('directory'); const ul = document.createElement('ul'); li.appendChild(ul);
+            }
             li.addEventListener('click', handleTreeviewItemClick);
-            ul.appendChild(li);
+            parentElementUL.appendChild(li);
         });
     }
 
-    window.expandAllTreeviewNodes = () => {
+    window.expandAllTreeviewNodes = () => { 
         if (!treeviewRoot) return;
-        notifyAppLogic('Espansione di tutti i nodi del treeview...');
-        treeviewRoot.querySelectorAll('li.directory:not(.open)').forEach(dirEl => {
-            // Simula un click per espandere e caricare il contenuto se necessario
-            // Assicurati che il click non causi problemi se chiamato in rapida successione
-            // o se l'elemento non è completamente inizializzato.
-            // Una chiamata diretta a toggleDirectory potrebbe essere più sicura in alcuni casi,
-            // ma il click simula più da vicino l'interazione utente.
-            dirEl.click(); 
-        });
+        if (window.config && config.IsLogLevel(config.LogLevelInfo)) console.info("TreeviewCtrl: Espansione nodi.");
+        treeviewRoot.querySelectorAll('li.directory:not(.open)').forEach(dirEl => { if (!dirEl.classList.contains('open')) dirEl.click(); });
+    };
+    window.collapseAllTreeviewNodes = () => { 
+        if (!treeviewRoot) return;
+        if (window.config && config.IsLogLevel(config.LogLevelInfo)) console.info("TreeviewCtrl: Compressione nodi.");
+        treeviewRoot.querySelectorAll('li.directory.open').forEach(dirEl => dirEl.classList.remove('open'));
     };
 
-    window.collapseAllTreeviewNodes = () => {
-        if (!treeviewRoot) return;
-        notifyAppLogic('Compressione di tutti i nodi del treeview...');
-        treeviewRoot.querySelectorAll('li.directory.open').forEach(dirEl => {
-            dirEl.classList.remove('open');
-            // Non è necessario pulire ul.innerHTML qui,
-            // perché le regole CSS si occuperanno di nascondere l'ul.
-        });
-    };
-    console.log('treeview_controller.js loaded');
+    if (window.config && config.IsLogLevel && config.IsLogLevel(config.LogLevelInfo)) {
+        console.info("treeview_controller.js caricato. In attesa di dataServiceReady e appLogicReady.");
+    }
+    attemptTreeviewInitialization(); 
 })();

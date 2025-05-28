@@ -18,7 +18,7 @@
             color: #333;
         }
 
-        #app-container {
+        #app-container { /* Aggiunto un contenitore principale per l'app */
             display: flex;
             flex-direction: column;
             flex-grow: 1;
@@ -29,13 +29,13 @@
             display: flex;
             flex-grow: 1;
             overflow: hidden;
-            position: relative; 
+            position: relative; /* Per overlay di caricamento e modali */
         }
 
         /* Pannelli */
         #left-panel {
             width: 25%;
-            min-width: 250px; 
+            min-width: 250px; /* Larghezza minima per leggibilità */
             border-right: 1px solid #dde1e3;
             box-sizing: border-box;
             display: flex;
@@ -47,12 +47,12 @@
             width: 75%;
             display: flex;
             flex-direction: column;
-            position: relative; 
+            position: relative; /* Per spinner e overlay */
             background-color: #fcfdff;
         }
         
         /* Header dei Pannelli */
-        .panel-header { 
+        .panel-header { /* Classe comune per gli header dei pannelli */
             background-color: #e9edf0;
             padding: 12px 15px;
             text-align: center;
@@ -60,7 +60,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0; 
+            flex-shrink: 0; /* Impedisce che l'header si restringa */
         }
 
         .panel-header h2 {
@@ -71,11 +71,11 @@
         }
         
         #left-panel .panel-header h2 {
-             flex-grow: 1; 
+             flex-grow: 1; /* Lascia che il titolo prenda spazio se non ci sono altri elementi */
         }
 
         #main-panel .panel-header {
-            justify-content: flex-start; 
+            justify-content: flex-start; /* Allinea gli elementi a sinistra */
         }
         #main-panel .panel-header h2 {
             margin-right: 15px;
@@ -149,12 +149,12 @@
             background-color: #e8f0f7;
         }
         #treeview-root li.directory::before {
-            content: '📁'; 
+            content: '📁'; /* Cartella chiusa */
             margin-right: 7px;
-            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; 
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; /* Per migliore resa emoji */
         }
         #treeview-root li.directory.open::before {
-            content: '📂'; 
+            content: '📂'; /* Cartella aperta */
         }
         #treeview-root li.directory > ul {
             display: none;
@@ -242,20 +242,20 @@
 
         /* Message History */
         #message-history-area {
-            background-color: #2c3e50; 
+            background-color: #2c3e50; /* Sfondo scuro per la console */
             color: #e0e6eb;
             border-top: 1px solid #4a5568;
             font-size: 0.85em;
             display: flex;
             flex-direction: column;
-            max-height: 35px; 
+            max-height: 35px; /* Altezza collassata */
             overflow: hidden;
             transition: max-height 0.3s ease-in-out;
-            flex-shrink: 0; 
+            flex-shrink: 0; /* Impedisce che si restringa con il contenuto principale */
             font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
         }
         #message-history-area.expanded {
-            max-height: 250px; 
+            max-height: 250px; /* Altezza espansa */
             overflow-y: auto;
         }
         #message-history-header {
@@ -281,7 +281,7 @@
             list-style: none;
             padding: 10px;
             margin: 0;
-            flex-grow: 1; 
+            flex-grow: 1; /* Permette lo scroll se il contenuto eccede max-height */
             overflow-y: auto;
         }
         #message-list li {
@@ -296,20 +296,20 @@
         }
         .message-timestamp {
             font-weight: normal;
-            color: #95a5a6; 
+            color: #95a5a6; /* Grigio più chiaro per timestamp */
             margin-right: 8px;
             white-space: nowrap;
         }
         .log-error { color: #e74c3c; }
         .log-warning { color: #f39c12; }
-        .log-info { color: #bdc3c7; } 
-        .log-debug { color: #7f8c8d; } 
+        .log-info { color: #bdc3c7; } /* Grigio chiaro per info */
+        .log-debug { color: #7f8c8d; } /* Grigio più scuro per debug */
 
 
         /* Upload Progress Box */
         #upload-progress-box {
             position: fixed;
-            bottom: 60px; 
+            bottom: 60px; /* Sopra la status bar */
             right: 20px;
             width: 320px;
             background-color: #ffffff;
@@ -319,13 +319,13 @@
             font-family: sans-serif;
             font-size: 0.9em;
             transition: all 0.3s ease-in-out;
-            display: none; 
+            display: none; /* Nascosto di default */
             border-radius: 6px;
-            max-height: 42px; 
+            max-height: 42px; /* Altezza collassata (solo header) */
             overflow: hidden;
         }
         #upload-progress-box.expanded {
-            max-height: 350px; 
+            max-height: 350px; /* Altezza espansa */
             overflow-y: auto;
         }
         #upload-progress-header {
@@ -380,12 +380,12 @@
             background-color: #e9edf0;
             border-radius: 3px;
             overflow: hidden;
-            height: 18px; 
+            height: 18px; /* Aumentato per migliore visibilità del testo */
             margin-bottom: 5px;
         }
         .upload-progress-bar {
             height: 100%;
-            background-color: #3498db; 
+            background-color: #3498db; /* Blu per progresso */
             width: 0%;
             text-align: center;
             line-height: 18px;
@@ -394,9 +394,9 @@
             font-size: 0.8em;
             transition: width 0.2s ease-out;
         }
-        .upload-item.complete .upload-progress-bar { background-color: #2ecc71; } 
-        .upload-item.failed .upload-progress-bar { background-color: #e74c3c; } 
-        .upload-item.cancelled .upload-progress-bar { background-color: #95a5a6; } 
+        .upload-item.complete .upload-progress-bar { background-color: #2ecc71; /* Verde per completato */ }
+        .upload-item.failed .upload-progress-bar { background-color: #e74c3c; /* Rosso per fallito */ }
+        .upload-item.cancelled .upload-progress-bar { background-color: #95a5a6; /* Grigio per annullato */ }
         .upload-status-text {
             font-size: 0.85em;
             color: #566f89;
@@ -406,12 +406,12 @@
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(44, 62, 80, 0.85); 
+            background-color: rgba(44, 62, 80, 0.85); /* Sfondo più scuro e opaco */
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 2000;
-            display: none; 
+            display: none; /* Nascosto di default */
             padding: 20px;
             box-sizing: border-box;
         }
@@ -441,20 +441,20 @@
         }
         .modal-content input[type="text"], 
         .modal-content input[type="range"] {
-            width: calc(100% - 22px); 
+            width: calc(100% - 22px); /* Considera padding e border */
             padding: 10px;
             border: 1px solid #c5d0d9;
             border-radius: 4px;
             font-size: 1em;
         }
         .modal-content input[type="range"] {
-            padding: 0; 
+            padding: 0; /* Range non ha padding verticale */
         }
         .slider-value {
             font-size: 0.9em;
             color: #566f89;
             text-align: right;
-            margin-top: -5px; 
+            margin-top: -5px; /* Avvicina al cursore */
         }
         .modal-actions {
             display: flex;
@@ -479,15 +479,15 @@
         #filelist-loading-overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(252, 253, 255, 0.8); 
-            display: none; 
+            background-color: rgba(252, 253, 255, 0.8); /* Sfondo leggermente opaco */
+            display: none; /* Nascosto di default */
             justify-content: center;
             align-items: center;
-            z-index: 50; 
+            z-index: 50; /* Sopra il contenuto del filelist ma sotto i modali */
         }
         .spinner {
-            border: 6px solid #f0f4f7; 
-            border-top: 6px solid #3498db; 
+            border: 6px solid #f0f4f7; /* Colore base più chiaro */
+            border-top: 6px solid #3498db; /* Colore principale */
             border-radius: 50%;
             width: 50px;
             height: 50px;
@@ -510,7 +510,7 @@
             font-weight: 500;
             color: white;
             background-color: #7f8c8d; /* Grigio default (es. per connecting) */
-            z-index: 2000; 
+            z-index: 2000; /* Sopra la maggior parte degli elementi */
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             display: flex;
             align-items: center;
@@ -518,13 +518,13 @@
         }
         #websocket-status-box.status-established { background-color: #2ecc71; } /* Verde */
         #websocket-status-box.status-error,
-        #websocket-status-box.status-failed_reconnect { background-color: #e74c3c; } /* Rosso */
+        #websocket-status-box.status-failed-reconnect { background-color: #e74c3c; } /* Rosso */
         #websocket-status-box.status-connecting,
-        #websocket-status-box.status-closed_will_retry { background-color: #f39c12; } /* Arancione */
-        #websocket-status-box.status-closed_normally { background-color: #95a5a6; } /* Grigio */
+        #websocket-status-box.status-closed-will-retry { background-color: #f39c12; } /* Arancione */
+        #websocket-status-box.status-closed-normally { background-color: #95a5a6; } /* Grigio */
 
 
-        /* --- TOAST NOTIFICATIONS con ANIMAZIONE "SALTELLANTE" --- */
+        /* Toast Notifications */
         #toast-container {
             position: fixed;
             bottom: 20px; 
@@ -535,59 +535,40 @@
             flex-direction: column-reverse; 
             align-items: center; 
             gap: 10px;
-            width: auto; 
-            min-width: 300px; 
-            max-width: 90%;   
+            width: auto; /* Lascia che i toast determinino la larghezza */
+            min-width: 300px; /* Larghezza minima per leggibilità */
+            max-width: 90%;   /* Non superare il 90% della larghezza schermo */
             pointer-events: none;
         }
-
         .toast {
             background-color: #333; 
             color: #fff; 
             padding: 12px 20px;
             border-radius: 6px; 
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); 
-            opacity: 0; 
+            opacity: 0;
             font-size: 0.95em;
             text-align: center;
-            pointer-events: auto;
-            margin-bottom: 10px;
-            transform-origin: bottom center; 
-            animation: toast-pop-rotate 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards,
+            animation: toast-slide-in 0.5s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards,
                        toast-fade-out 0.5s ease-out 4.5s forwards; 
+            pointer-events: auto;
+            margin-bottom: 10px; /* Spazio tra i toast se si sovrappongono */
+            transform: translateY(20px); /* Posizione iniziale per l'animazione slide-in */
         }
-
-        @keyframes toast-pop-rotate {
-            0% {
-                opacity: 0;
-                transform: translateY(100%) rotateZ(-15deg) scale(0.7); 
-            }
-            60% {
-                opacity: 1;
-                transform: translateY(-15px) rotateZ(5deg) scale(1.05); 
-            }
-            100% {
-                opacity: 1;
-                transform: translateY(0) rotateZ(0deg) scale(1); 
+        @keyframes toast-slide-in {
+            to {
+                opacity: 0.95; /* Leggermente traslucido */
+                transform: translateY(0);
             }
         }
-
         @keyframes toast-fade-out {
-            from { 
-                opacity: 1; 
-                transform: translateY(0) scale(1);
-            }
-            to { 
-                opacity: 0; 
-                transform: translateY(20px) scale(0.9); 
-            }
+            from { opacity: 0.95; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(20px); }
         }
-
         .toast-info { background-color: #2980b9; }
         .toast-success { background-color: #27ae60; }
-        .toast-warning { background-color: #f39c12; color: #333; } 
+        .toast-warning { background-color: #f39c12; color: #333; }
         .toast-error { background-color: #c0392b; }
-        /* --- FINE STILI TOAST --- */
 
     </style>
 </head>
@@ -670,19 +651,15 @@
             <div id="upload-items-container"></div>
         </div>
         
-        <div id="websocket-status-box">
-            <span id="websocket-status-text">Connessione in corso...</span>
+        <div id="websocket-status-box"> <span id="websocket-status-text">Connessione in corso...</span>
         </div>
     </div>
 
-    <div id="toast-container"></div>
-
-    <div id="chunk-size-modal" class="modal-overlay">
+    <div id="toast-container"></div> <div id="chunk-size-modal" class="modal-overlay">
         <div class="modal-content">
             <h3>Seleziona Dimensione Chunk</h3>
             <label for="chunk-size-slider">Dimensione Chunk:</label>
-            <input type="range" id="chunk-size-slider" min="1" value="4194304">
-            <div class="slider-value" id="chunk-size-display">4 MB</div>
+            <input type="range" id="chunk-size-slider" min="1" value="4194304"> <div class="slider-value" id="chunk-size-display">4 MB</div>
             <label for="parallel-chunks-slider">Chunk in Parallelo:</label>
             <input type="range" id="parallel-chunks-slider" min="1" max="16" value="4">
             <div class="slider-value" id="parallel-chunks-display">4</div>
@@ -725,17 +702,5 @@
     <script src="/js/treeview_controller.js"></script>
     <script src="/js/filelist_controller.js"></script>
     <script src="/js/app_logic.js"></script>
-    <script>
-        // Chiamata finale per avviare l'app, assicurandosi che DOM sia pronto e app_logic sia caricato
-        document.addEventListener('DOMContentLoaded', () => {
-            if (window.app_logic && typeof window.app_logic.initializePrimaryUIAndServices === 'function') {
-                 // Se hai una funzione di init principale in app_logic che gestisce l'attesa degli eventi dei servizi
-                 // window.app_logic.initializePrimaryUIAndServices();
-            } else if (window.config && config.IsLogLevel(config.LogLevelWarning)) {
-                // console.warn("Funzione di inizializzazione principale non trovata in app_logic.");
-                // L'inizializzazione è gestita internamente da app_logic.js tramite i suoi listener
-            }
-        });
-    </script>
 </body>
 </html>

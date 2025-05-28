@@ -1,181 +1,266 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filesystem Explorer</title>
+    <title>CloudDav Explorer</title>
     <style>
-        /* ... (tutti gli stili precedenti di index.html rimangono invariati) ... */
-        /* ... (assicurati che gli stili per #left-panel, #main-panel, header, ecc. siano qui) ... */
+        /* Stili Generali */
         body {
             margin: 0;
             padding: 0;
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
             display: flex;
             flex-direction: column;
             height: 100vh;
             overflow: hidden;
+            background-color: #f4f7f9;
+            color: #333;
         }
+
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
         #content-area {
             display: flex;
             flex-grow: 1;
             overflow: hidden;
-            position: relative;
+            position: relative; 
         }
+
+        /* Pannelli */
         #left-panel {
             width: 25%;
-            border-right: 1px solid #ccc;
+            min-width: 250px; 
+            border-right: 1px solid #dde1e3;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
-            z-index: 1;
+            background-color: #ffffff;
         }
+
         #main-panel {
             width: 75%;
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
-            z-index: 1;
-            position: relative; /* Per lo spinner del filelist */
+            position: relative; 
+            background-color: #fcfdff;
         }
-        header {
-            background-color: #f0f0f0;
-            padding: 10px;
+        
+        /* Header dei Pannelli */
+        .panel-header { 
+            background-color: #e9edf0;
+            padding: 12px 15px;
             text-align: center;
-            border-bottom: 1px solid #ccc;
+            border-bottom: 1px solid #dde1e3;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0; 
         }
-         header h2 {
-             margin: 0;
-             flex-grow: 1;
-             text-align: center;
-         }
-         #main-panel header {
-             justify-content: flex-start;
-         }
-         #main-panel header h2 {
-              text-align: left;
-              margin-right: 10px;
-         }
-         #main-panel header button {
-             padding: 5px 10px;
-             cursor: pointer;
-             border: 1px solid #ccc;
-             border-radius: 4px;
-             background-color: #e0e0e0;
-         }
-          #main-panel header button:hover {
-              background-color: #d5d5d5;
-          }
-          #main-panel header button:disabled {
-              cursor: not-allowed;
-              opacity: 0.5;
-          }
-        #treeview-content {
+
+        .panel-header h2 {
+            margin: 0;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        #left-panel .panel-header h2 {
+             flex-grow: 1; 
+        }
+
+        #main-panel .panel-header {
+            justify-content: flex-start; 
+        }
+        #main-panel .panel-header h2 {
+            margin-right: 15px;
+        }
+
+        /* Bottoni generici */
+        button, input[type="button"], input[type="submit"] {
+            padding: 8px 15px;
+            cursor: pointer;
+            border: 1px solid #c5d0d9;
+            border-radius: 4px;
+            background-color: #f0f4f7;
+            color: #334e68;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover, input[type="button"]:hover, input[type="submit"]:hover {
+            background-color: #e1e8ed;
+            border-color: #b0c0cf;
+        }
+        button:active, input[type="button"]:active, input[type="submit"]:active {
+            background-color: #d1dade;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+        button:disabled, input[type="button"]:disabled, input[type="submit"]:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            background-color: #e9edf0;
+        }
+        
+        /* Contenuto dei Pannelli */
+        #treeview-content, #filelist-content {
             flex-grow: 1;
             overflow-y: auto;
-            padding: 10px;
-             background-color: #f9f9f9;
+            padding: 15px;
         }
+        #treeview-content {
+             background-color: #fdfdfe;
+        }
+
+        /* Controlli Globali Treeview */
         #global-controls {
             margin-bottom: 10px;
             padding-bottom: 10px;
-            border-bottom: 1px solid #ccc;
+            border-bottom: 1px solid #eef2f5;
             text-align: center;
         }
         #global-controls button {
             margin: 0 5px;
-            padding: 5px 10px;
-            cursor: pointer;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background-color: #e0e0e0;
         }
+
+        /* Treeview */
         #treeview-root {
             list-style: none;
             padding-left: 0;
             margin: 0;
         }
         #treeview-root ul {
-             padding-left: 20px;
+            padding-left: 20px;
+            border-left: 1px dashed #e0e6eb;
         }
         #treeview-root li {
-            margin: 5px 0;
+            margin: 3px 0;
             cursor: pointer;
-            padding: 3px 0;
-            transition: background-color 0.2s ease;
+            padding: 5px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            font-size: 0.95em;
+        }
+        #treeview-root li:hover {
+            background-color: #e8f0f7;
         }
         #treeview-root li.directory::before {
-            content: '📁 ';
-            margin-right: 5px;
-        }
-
-        #treeview-root li.directory > ul {
-            display: none; /* Nasconde i figli delle directory per default */
-        }
-        #treeview-root li.directory.open > ul {
-            display: block; /* Mostra i figli quando la directory ha la classe .open */
+            content: '📁'; 
+            margin-right: 7px;
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; 
         }
         #treeview-root li.directory.open::before {
-            content: '📂 ';
+            content: '📂'; 
+        }
+        #treeview-root li.directory > ul {
+            display: none;
+        }
+        #treeview-root li.directory.open > ul {
+            display: block;
+            margin-top: 3px;
         }
         #treeview-root .selected {
-            font-weight: bold;
-            background-color: #d0d0d0;
+            font-weight: 600;
+            background-color: #d0e0f0;
+            color: #1c2b3a;
         }
-        #filelist-content {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 10px;
-            background-color: #f9f9f9;
-        }
+
+        /* File List */
         #filelist-content table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 15px;
+            font-size: 0.9em;
         }
         #filelist-content th, #filelist-content td {
-            border: 1px solid #ddd;
-            padding: 10px;
+            border: 1px solid #eef2f5;
+            padding: 10px 12px;
             text-align: left;
+            vertical-align: middle;
         }
         #filelist-content th {
-            background-color: #f2f2f2;
-            font-weight: bold;
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #4a5568;
         }
-        #filelist-content .file-actions button, #filelist-content .upload-form button, #filelist-content .filter-area button, #filelist-content .pagination-area button {
-            padding: 5px 10px;
-            cursor: pointer;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background-color: #e0e0e0;
+        #filelist-content tr:nth-child(even) {
+            background-color: #fdfdfe;
+        }
+        #filelist-content tr:hover td {
+            background-color: #f0f8ff;
+        }
+        #filelist-content .file-actions button, 
+        #filelist-content .upload-form button, 
+        #filelist-content .filter-area button, 
+        #filelist-content .pagination-area button {
+            margin-right: 5px;
         }
         #filelist-content td:first-child[data-isdir="true"] {
-             cursor: pointer;
-             color: #007bff;
-             text-decoration: underline;
+            cursor: pointer;
+            color: #007bff;
         }
-        #message-history-area {
-            background-color: #f9f9f9;
-            border-top: 1px solid #ccc;
+        #filelist-content td:first-child[data-isdir="true"]:hover {
+            text-decoration: underline;
+        }
+        .upload-form, .filter-area, .pagination-area, #current-path-area {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8fafc;
+            border: 1px solid #eef2f5;
+            border-radius: 4px;
+        }
+        .filter-group {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .filter-group label {
+            margin-right: 8px;
             font-size: 0.9em;
+        }
+        .filter-group input[type="text"], .filter-group input[type="datetime-local"] {
+            padding: 6px 10px;
+            border: 1px solid #c5d0d9;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        #current-path-area {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        .pagination-area {
+            text-align: center;
+        }
+        .pagination-area span {
+            margin: 0 10px;
+            font-size: 0.9em;
+        }
+
+        /* Message History */
+        #message-history-area {
+            background-color: #2c3e50; 
+            color: #e0e6eb;
+            border-top: 1px solid #4a5568;
+            font-size: 0.85em;
             display: flex;
             flex-direction: column;
-            max-height: 30px;
+            max-height: 35px; 
             overflow: hidden;
-            transition: max-height 0.3s ease;
-            z-index: 10;
+            transition: max-height 0.3s ease-in-out;
+            flex-shrink: 0; 
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
         }
         #message-history-area.expanded {
-            max-height: 200px;
+            max-height: 250px; 
             overflow-y: auto;
         }
         #message-history-header {
-            background-color: #e0e0e0;
-            padding: 5px 10px;
+            background-color: #34495e;
+            padding: 8px 12px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
@@ -186,6 +271,7 @@
         #message-history-toggle {
             background: none;
             border: none;
+            color: #e0e6eb;
             cursor: pointer;
             font-size: 1.2em;
             padding: 0;
@@ -193,127 +279,226 @@
         }
         #message-list {
             list-style: none;
-            padding: 0 10px 10px 10px;
+            padding: 10px;
             margin: 0;
+            flex-grow: 1; 
+            overflow-y: auto;
         }
         #message-list li {
             margin-bottom: 5px;
             padding-bottom: 5px;
-            border-bottom: 1px dotted #ccc;
+            border-bottom: 1px dotted #4a5568;
             word-break: break-word;
+            line-height: 1.4;
+        }
+        #message-list li:last-child {
+            border-bottom: none;
         }
         .message-timestamp {
             font-weight: normal;
-            color: #666;
-            margin-right: 10px;
+            color: #95a5a6; 
+            margin-right: 8px;
             white-space: nowrap;
         }
+        .log-error { color: #e74c3c; }
+        .log-warning { color: #f39c12; }
+        .log-info { color: #bdc3c7; } 
+        .log-debug { color: #7f8c8d; } 
+
+
+        /* Upload Progress Box */
         #upload-progress-box {
             position: fixed;
-            bottom: 40px;
+            bottom: 60px; 
             right: 20px;
-            width: 300px;
-            background-color: #fff;
-            border: 1px solid #ccc;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            width: 320px;
+            background-color: #ffffff;
+            border: 1px solid #dde1e3;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
             z-index: 1000;
             font-family: sans-serif;
             font-size: 0.9em;
-            transition: all 0.3s ease;
-            display: none;
-            border-radius: 8px;
-            max-height: 40px;
+            transition: all 0.3s ease-in-out;
+            display: none; 
+            border-radius: 6px;
+            max-height: 42px; 
             overflow: hidden;
         }
         #upload-progress-box.expanded {
-            max-height: 300px;
+            max-height: 350px; 
             overflow-y: auto;
         }
         #upload-progress-header {
-            background-color: #f0f0f0;
-            padding: 5px 10px;
-            border-bottom: 1px solid #ccc;
+            background-color: #f0f4f7;
+            padding: 10px 12px;
+            border-bottom: 1px solid #dde1e3;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-weight: bold;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            flex-shrink: 0;
+            font-weight: 600;
+            color: #2c3e50;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+        }
+        #upload-progress-header #upload-header-text {
+            flex-grow: 1;
+        }
+        #upload-progress-toggle {
+            background: none; border: none; cursor: pointer; font-size: 1.2em; padding: 0; color: #566f89;
+        }
+        #upload-items-container {
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
         .upload-item {
-            border: 1px solid #ddd;
-            padding: 8px;
-            border-radius: 5px;
-            background-color: #f9f9f9;
+            border: 1px solid #eef2f5;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #f8fafc;
+        }
+        .upload-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 0.95em;
+        }
+        .upload-file-name {
+            font-weight: 500;
+            color: #334e68;
+            word-break: break-all;
+        }
+        .upload-cancel-button {
+            background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 1.1em; padding: 2px;
+        }
+        .upload-cancel-button:hover { color: #c0392b; }
+        .upload-progress-bar-container {
+            width: 100%;
+            background-color: #e9edf0;
+            border-radius: 3px;
+            overflow: hidden;
+            height: 18px; 
+            margin-bottom: 5px;
         }
         .upload-progress-bar {
-            height: 15px;
-            background-color: #4CAF50;
+            height: 100%;
+            background-color: #3498db; 
             width: 0%;
             text-align: center;
-            line-height: 15px;
+            line-height: 18px;
             color: white;
-            font-weight: bold;
-            transition: width 0.3s ease;
+            font-weight: 500;
             font-size: 0.8em;
+            transition: width 0.2s ease-out;
         }
+        .upload-item.complete .upload-progress-bar { background-color: #2ecc71; } 
+        .upload-item.failed .upload-progress-bar { background-color: #e74c3c; } 
+        .upload-item.cancelled .upload-progress-bar { background-color: #95a5a6; } 
+        .upload-status-text {
+            font-size: 0.85em;
+            color: #566f89;
+        }
+
+        /* Modali */
         .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(44, 62, 80, 0.85); 
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 2000;
-            display: none;
+            display: none; 
+            padding: 20px;
+            box-sizing: border-box;
         }
         .modal-content {
-            background-color: #fff;
-            padding: 20px;
+            background-color: #ffffff;
+            padding: 25px 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
             width: 90%;
-            max-width: 400px;
+            max-width: 450px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 18px;
         }
-        .modal-actions button {
-            padding: 8px 15px;
-            border: 1px solid #ccc;
+        .modal-content h3 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            color: #2c3e50;
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+        .modal-content label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            display: block;
+            color: #4a5568;
+        }
+        .modal-content input[type="text"], 
+        .modal-content input[type="range"] {
+            width: calc(100% - 22px); 
+            padding: 10px;
+            border: 1px solid #c5d0d9;
             border-radius: 4px;
-            cursor: pointer;
+            font-size: 1em;
         }
+        .modal-content input[type="range"] {
+            padding: 0; 
+        }
+        .slider-value {
+            font-size: 0.9em;
+            color: #566f89;
+            text-align: right;
+            margin-top: -5px; 
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .modal-actions button.primary {
+            background-color: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+        .modal-actions button.primary:hover { background-color: #2980b9; }
+        .modal-actions button.danger {
+            background-color: #e74c3c;
+            color: white;
+            border-color: #c0392b;
+        }
+        .modal-actions button.danger:hover { background-color: #c0392b; }
+
+        /* Filelist Loading Overlay */
         #filelist-loading-overlay {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.7);
-            display: none;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(252, 253, 255, 0.8); 
+            display: none; 
             justify-content: center;
             align-items: center;
-            z-index: 2;
-            pointer-events: auto;
+            z-index: 50; 
         }
         .spinner {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #3498db;
+            border: 6px solid #f0f4f7; 
+            border-top: 6px solid #3498db; 
             border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 2s linear infinite;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* WebSocket Status Box */
         #websocket-status-box {
             position: fixed;
             bottom: 10px;
@@ -321,176 +506,176 @@
             padding: 8px 12px;
             border-radius: 5px;
             font-family: sans-serif;
-            font-size: 0.9em;
-            font-weight: bold;
+            font-size: 0.85em;
+            font-weight: 500;
             color: white;
-            background-color: #555;
-            z-index: 1000;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            background-color: #7f8c8d; /* Grigio default (es. per connecting) */
+            z-index: 2000; 
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             display: flex;
             align-items: center;
+            transition: background-color 0.3s ease;
         }
-        #websocket-status-box.status-green { background-color: #4CAF50; }
-        #websocket-status-box.status-red { background-color: #f44336; }
-        #websocket-status-box.status-yellow { background-color: #ff9800; }
+        #websocket-status-box.status-established { background-color: #2ecc71; } /* Verde */
+        #websocket-status-box.status-error,
+        #websocket-status-box.status-failed_reconnect { background-color: #e74c3c; } /* Rosso */
+        #websocket-status-box.status-connecting,
+        #websocket-status-box.status-closed_will_retry { background-color: #f39c12; } /* Arancione */
+        #websocket-status-box.status-closed_normally { background-color: #95a5a6; } /* Grigio */
 
 
-        /* --- NUOVI STILI PER TOAST "TOSTAPANE" --- */
+        /* --- TOAST NOTIFICATIONS con ANIMAZIONE "SALTELLANTE" --- */
         #toast-container {
             position: fixed;
-            bottom: 20px; /* Posiziona in basso */
-            left: 50%;    /* Centra orizzontalmente */
-            transform: translateX(-50%); /* Corregge il centraggio */
+            bottom: 20px; 
+            left: 50%;   
+            transform: translateX(-50%); 
             z-index: 3000;
             display: flex;
-            flex-direction: column-reverse; /* I nuovi toast appaiono sopra i vecchi */
-            align-items: center; /* Centra i toast se hanno larghezze diverse */
+            flex-direction: column-reverse; 
+            align-items: center; 
             gap: 10px;
+            width: auto; 
+            min-width: 300px; 
+            max-width: 90%;   
             pointer-events: none;
-            width: 320px; /* Larghezza fissa per la "tostiera" */
-            /* Effetto "fessura tostiera" (opzionale) */
-            /* background-color: #444;
-            padding: 10px 10px 0 10px;
-            border-top-left-radius: 10px;
-            border-top-right-radius: 10px;
-            box-shadow: 0 -2px 5px rgba(0,0,0,0.2); */
         }
 
         .toast {
-            background-color: #fff; /* Sfondo bianco per il "pane" */
-            color: #333; /* Testo scuro */
-            padding: 15px 25px;
-            border-radius: 8px; /* Angoli più arrotondati */
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); /* Ombra più pronunciata */
-            opacity: 0;
-            min-width: 280px; /* Larghezza minima del toast */
+            background-color: #333; 
+            color: #fff; 
+            padding: 12px 20px;
+            border-radius: 6px; 
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); 
+            opacity: 0; 
+            font-size: 0.95em;
             text-align: center;
-            border: 1px solid #ddd;
-            /* L'animazione verrà definita qui */
-            animation: toast-pop-rotate 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards,
-                         toast-fade-out 0.5s ease-out 4.5s forwards; /* 4.5s di attesa prima del fade-out */
             pointer-events: auto;
-            transform-origin: bottom center; /* Punto di rotazione per l'effetto "pop" */
+            margin-bottom: 10px;
+            transform-origin: bottom center; 
+            animation: toast-pop-rotate 0.7s cubic-bezier(0.68, -0.55, 0.27, 1.55) forwards,
+                       toast-fade-out 0.5s ease-out 4.5s forwards; 
         }
 
-        /* Keyframes per l'animazione "tostapane roteante" */
         @keyframes toast-pop-rotate {
             0% {
                 opacity: 0;
-                transform: translateY(100%) rotateZ(-30deg) scale(0.5); /* Parte da sotto, ruotato e piccolo */
+                transform: translateY(100%) rotateZ(-15deg) scale(0.7); 
             }
             60% {
                 opacity: 1;
-                transform: translateY(-20px) rotateZ(10deg) scale(1.1); /* Salta su, ruota un po' e si ingrandisce */
+                transform: translateY(-15px) rotateZ(5deg) scale(1.05); 
             }
             100% {
                 opacity: 1;
-                transform: translateY(0) rotateZ(0deg) scale(1); /* Si stabilizza */
+                transform: translateY(0) rotateZ(0deg) scale(1); 
             }
         }
 
         @keyframes toast-fade-out {
-            from {
-                opacity: 1;
+            from { 
+                opacity: 1; 
                 transform: translateY(0) scale(1);
             }
-            to {
-                opacity: 0;
-                transform: translateY(20px) scale(0.9); /* Scende un po' e rimpicciolisce */
+            to { 
+                opacity: 0; 
+                transform: translateY(20px) scale(0.9); 
             }
         }
 
-        /* Classi per i tipi di toast (colori del bordo o icone se vuoi) */
-        .toast-info { border-left: 5px solid #2196F3; }
-        .toast-success { border-left: 5px solid #4CAF50; }
-        .toast-warning { border-left: 5px solid #FFC107; color: #333; /* Assicura leggibilità */ }
-        .toast-error { border-left: 5px solid #f44336; }
-        /* --- FINE NUOVI STILI TOAST --- */
+        .toast-info { background-color: #2980b9; }
+        .toast-success { background-color: #27ae60; }
+        .toast-warning { background-color: #f39c12; color: #333; } 
+        .toast-error { background-color: #c0392b; }
+        /* --- FINE STILI TOAST --- */
 
     </style>
 </head>
 <body>
-    <div id="content-area">
-        <div id="toast-container">
-            </div>
-        <div id="left-panel">
-            <header><h2>Storages</h2></header>
-            <div id="treeview-content">
-                <div id="global-controls">
-                    <button onclick="expandAllTreeviewNodes()">Espandi Tutto</button>
-                    <button onclick="collapseAllTreeviewNodes()">Comprimi Tutto</button>
+    <div id="app-container">
+        <div id="content-area">
+            <div id="left-panel">
+                <header class="panel-header"><h2>Storages</h2></header>
+                <div id="treeview-content">
+                    <div id="global-controls">
+                        <button onclick="window.expandAllTreeviewNodes && window.expandAllTreeviewNodes()">Espandi Tutto</button>
+                        <button onclick="window.collapseAllTreeviewNodes && window.collapseAllTreeviewNodes()">Comprimi Tutto</button>
+                    </div>
+                    <ul id="treeview-root"></ul>
                 </div>
-                <ul id="treeview-root"></ul>
+            </div>
+            <div id="main-panel">
+                <header class="panel-header">
+                    <h2>File List</h2>
+                    <button id="create-folder-btn" style="display: none;">Nuova Cartella</button>
+                </header>
+                <div id="filelist-content">
+                    <div class="upload-form">
+                        <h3>Upload File</h3>
+                        <input type="file" id="upload-file-input" multiple>
+                        <button id="trigger-upload-btn">Upload</button>
+                    </div>
+                    <div class="filter-area">
+                        <div class="filter-group">
+                            <input type="checkbox" id="enable-name-filter">
+                            <label for="enable-name-filter">Nome File (Regex):</label>
+                            <input type="text" id="name-filter">
+                        </div>
+                        <div class="filter-group">
+                            <input type="checkbox" id="enable-timestamp-filter">
+                            <label for="enable-timestamp-filter">Modificato Dopo:</label>
+                            <input type="datetime-local" id="timestamp-filter">
+                        </div>
+                        <button id="apply-filters-btn">Applica Filtri</button>
+                        <button id="clear-filters-btn">Cancella Filtri</button>
+                    </div>
+                    <div id="current-path-area">Percorso Corrente: /</div>
+                    <table id="filelist-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Size</th>
+                                <th>Modified</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="pagination-area">
+                        <button id="prev-page-btn" disabled>Precedente</button>
+                        <span>Pagina <span id="current-page">1</span> di <span id="total-pages">1</span></span>
+                        <button id="next-page-btn" disabled>Successiva</button>
+                    </div>
+                </div>
+                <div id="filelist-loading-overlay">
+                    <div class="spinner"></div>
+                </div>
             </div>
         </div>
-        <div id="main-panel">
-            <header>
-                <h2>File List</h2>
-                <button id="create-folder-btn" style="display: none;">Nuova Cartella</button>
-            </header>
-            <div id="filelist-content">
-                <div class="upload-form">
-                    <h3>Upload File</h3>
-                    <input type="file" id="upload-file-input" multiple>
-                    <button id="trigger-upload-btn">Upload</button>
-                </div>
-                <div class="filter-area">
-                    <div class="filter-group">
-                        <input type="checkbox" id="enable-name-filter">
-                        <label for="enable-name-filter">Nome File (Regex):</label>
-                        <input type="text" id="name-filter">
-                    </div>
-                    <div class="filter-group">
-                        <input type="checkbox" id="enable-timestamp-filter">
-                        <label for="enable-timestamp-filter">Modificato Dopo:</label>
-                        <input type="datetime-local" id="timestamp-filter">
-                    </div>
-                    <button id="apply-filters-btn">Applica Filtri</button>
-                    <button id="clear-filters-btn">Cancella Filtri</button>
-                </div>
-                <div id="current-path-area">Percorso Corrente: /</div>
-                <table id="filelist-table">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Type</th>
-                            <th>Size</th>
-                            <th>Modified</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-                <div class="pagination-area">
-                    <button id="prev-page-btn">Precedente</button>
-                    <span>Pagina <span id="current-page">1</span> di <span id="total-pages">1</span></span>
-                    <button id="next-page-btn">Successiva</button>
-                </div>
+
+        <div id="message-history-area">
+            <div id="message-history-header">
+                <span>Cronologia Messaggi</span>
+                <button id="message-history-toggle">▲</button>
             </div>
-            <div id="filelist-loading-overlay">
-                <div class="spinner"></div>
-            </div>
+            <ul id="message-list"></ul>
         </div>
+
+        <div id="upload-progress-box">
+            <div id="upload-progress-header">
+                <span id="upload-header-text">Upload</span>
+                <button id="upload-progress-toggle">▲</button>
+            </div>
+            <div id="upload-items-container"></div>
+        </div>
+        
         <div id="websocket-status-box">
-            Stato Connessione: <span id="websocket-status-text">Connessione in corso...</span>
+            <span id="websocket-status-text">Connessione in corso...</span>
         </div>
     </div>
 
-    <div id="message-history-area">
-        <div id="message-history-header">
-            <span>Cronologia Messaggi</span>
-            <button id="message-history-toggle">▲</button>
-        </div>
-        <ul id="message-list"></ul>
-    </div>
-
-    <div id="upload-progress-box">
-        <div id="upload-progress-header">
-             <span id="upload-header-text">Upload</span>
-            <button id="upload-progress-toggle">▲</button>
-        </div>
-        <div id="upload-items-container"></div>
-    </div>
+    <div id="toast-container"></div>
 
     <div id="chunk-size-modal" class="modal-overlay">
         <div class="modal-content">
@@ -532,10 +717,25 @@
         </div>
     </div>
 
+    <script src="/js/config.js"></script>
+    <script src="/js/websocket_service.js"></script> 
+    <script src="/js/cache_service.js"></script>
+    <script src="/js/data_service.js"></script> 
     <script src="/js/notification_service.js"></script>
-    <script src="/js/websocket_service.js"></script>
     <script src="/js/treeview_controller.js"></script>
     <script src="/js/filelist_controller.js"></script>
     <script src="/js/app_logic.js"></script>
+    <script>
+        // Chiamata finale per avviare l'app, assicurandosi che DOM sia pronto e app_logic sia caricato
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.app_logic && typeof window.app_logic.initializePrimaryUIAndServices === 'function') {
+                 // Se hai una funzione di init principale in app_logic che gestisce l'attesa degli eventi dei servizi
+                 // window.app_logic.initializePrimaryUIAndServices();
+            } else if (window.config && config.IsLogLevel(config.LogLevelWarning)) {
+                // console.warn("Funzione di inizializzazione principale non trovata in app_logic.");
+                // L'inizializzazione è gestita internamente da app_logic.js tramite i suoi listener
+            }
+        });
+    </script>
 </body>
 </html>

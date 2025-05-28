@@ -9,77 +9,108 @@ import (
 	"syscall"
 	"time"
 
+	// Assicurati che i percorsi di importazione siano corretti per la tua struttura di progetto
 	"clouddav/auth"
 	"clouddav/config"
 	"clouddav/handlers"
 	"clouddav/storage"
 	"clouddav/storage/azureblob"
 	"clouddav/storage/local"
-	"clouddav/websocket" // Importa il package websocket
+	"clouddav/websocket"
 )
 
 func main() {
 	// Carica la configurazione
-	config_path:=os.Getenv("CONFIG")
-	if err := config.LoadConfig(config_path); err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+	// Il percorso del file di configurazione può essere passato tramite una variabile d'ambiente
+	// o un flag da riga di comando. Qui usiamo una variabile d'ambiente.
+	configPath := os.Getenv("CONFIG_FILE_PATH")
+	if configPath == "" {
+		// Se non specificato, usa un percorso di default o esci se è mandatorio
+		configPath = "config.yaml" // Assicurati che questo file esista o sia il tuo default
+		log.Printf("CONFIG_FILE_PATH non impostata, utilizzo default: %s", configPath)
+	}
+
+	if err := config.LoadConfig(configPath); err != nil {
+		log.Fatalf("Errore nel caricamento della configurazione da '%s': %v", configPath, err)
 	}
 
 	// Inizializza l'autenticazione Azure AD se abilitata
 	if config.AppConfig.EnableAuth {
-		if err := auth.InitAzureAD(&config.AppConfig); err != nil {
-			log.Fatalf("Failed to initialize Azure AD authentication: %v", err)
+		if err := auth.InitAzureAD(&config.AppConfig); err != nil { // Passa il puntatore alla configurazione
+			log.Fatalf("Errore nell'inizializzazione dell'autenticazione Azure AD: %v", err)
 		}
-		log.Println("Azure AD authentication initialized.")
+		if config.IsLogLevel(config.LogLevelInfo) {
+			log.Println("Autenticazione Azure AD inizializzata.")
+		}
 	} else {
-		log.Println("Azure AD authentication is disabled.")
+		if config.IsLogLevel(config.LogLevelInfo) {
+			log.Println("Autenticazione Azure AD disabilitata.")
+		}
 	}
 
 	// Inizializza i provider di storage
-	storage.ClearRegistry() // Pulisce il registro degli storage prima di inizializzare
+	storage.ClearRegistry() // Pulisce il registro prima di inizializzare
 	for _, sc := range config.AppConfig.Storages {
 		var provider storage.StorageProvider
 		var err error
 		switch sc.Type {
 		case "local":
-			log.Printf("Inizializzazione provider locale: %+v", sc)
+			if config.IsLogLevel(config.LogLevelInfo) {
+				log.Printf("Inizializzazione provider locale: %+v", sc)
+			}
 			provider, err = local.NewProvider(&sc)
 		case "azure-blob":
-			log.Printf("Inizializzazione provider Azure Blob: %+v", sc)
+			if config.IsLogLevel(config.LogLevelInfo) {
+				log.Printf("Inizializzazione provider Azure Blob: %+v", sc)
+			}
 			provider, err = azureblob.NewProvider(&sc)
 		default:
-			log.Fatalf("Unknown storage type configured: %s", sc.Type)
+			log.Fatalf("Tipo di storage non riconosciuto configurato: %s", sc.Type)
 		}
 
 		if err != nil {
-			log.Fatalf("Failed to initialize storage provider %s (%s): %v", sc.Name, sc.Type, err)
+			log.Fatalf("Errore nell'inizializzazione del provider di storage %s (%s): %v", sc.Name, sc.Type, err)
 		}
-		storage.RegisterProvider(provider)
-		log.Printf("Storage provider registrato con successo: Type='%s', Name='%s'", provider.Type(), provider.Name())
+		if err := storage.RegisterProvider(provider); err != nil {
+			log.Fatalf("Errore nella registrazione del provider di storage %s: %v", provider.Name(), err)
+		}
+		if config.IsLogLevel(config.LogLevelInfo) {
+			log.Printf("Provider di storage registrato con successo: Tipo='%s', Nome='%s'", provider.Type(), provider.Name())
+		}
 	}
 
 	// Crea il contesto principale per l'applicazione
 	appCtx, appCancel := context.WithCancel(context.Background())
 	defer appCancel()
 
-	// Inizializza il WebSocket Hub
-	wsHub := websocket.NewHub(appCtx, &config.AppConfig)
-	go wsHub.Run() // Avvia il Hub in una goroutine
+	// Inizializza l'Hub WebSocket
+	wsHub := websocket.NewHub(appCtx, &config.AppConfig) // Passa il puntatore alla configurazione
+	go wsHub.Run()                                     // Avvia l'Hub in una goroutine
 
 	// Crea un nuovo multiplexer HTTP
 	mainMux := http.NewServeMux()
 
-	// Inizializza gli handler HTTP, passando il Hub e il multiplexer
-	handlers.InitHandlers(&config.AppConfig, wsHub, mainMux) // Passa mainMux
+	// Inizializza gli handler HTTP, passando l'Hub e il multiplexer
+	// Assicurati che config.AppConfig sia un puntatore se InitRoutes lo richiede come tale
+	handlers.InitRoutes(&config.AppConfig, wsHub, mainMux) // Passa il puntatore alla configurazione e mainMux
 
 	// Configura il server HTTP
 	readTimeout, writeTimeout, idleTimeout, err := config.AppConfig.GetTimeouts()
 	if err != nil {
-		log.Fatalf("Failed to parse server timeouts: %v", err)
+		log.Fatalf("Errore nel parsing dei timeout del server: %v", err)
 	}
 
+	// Recupera la porta dalla configurazione o usa un default
+	// Questa parte potrebbe essere migliorata leggendo da config.AppConfig se hai un campo per la porta
+	serverPort := os.Getenv("PORT")
+	if serverPort == "" {
+		serverPort = "8180" // Default port
+	}
+	serverAddr := ":" + serverPort
+
+
 	server := &http.Server{
-		Addr:         ":8180", // Porta su cui il server ascolterà
+		Addr:         serverAddr,
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
 		IdleTimeout:  idleTimeout,
@@ -88,7 +119,7 @@ func main() {
 
 	// Avvia il server in una goroutine
 	go func() {
-		log.Printf("Server avviato sulla porta %s", server.Addr)
+		log.Printf("Server avviato sulla porta %s", serverAddr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server non avviato: %v", err)
 		}
@@ -110,9 +141,8 @@ func main() {
 		log.Fatalf("Shutdown del server forzato: %v", err)
 	}
 
-	// Annulla il contesto dell'applicazione per fermare le goroutine del Hub
+	// Annulla il contesto dell'applicazione per fermare le goroutine dell'Hub
 	appCancel()
 
 	log.Println("Server spento.")
 }
-
